@@ -26,3 +26,10 @@ curl -X POST http://localhost:8080/api/v1/jobs \
     "user_agent_mode": "shared"
   }'
 ```
+
+## Тесты
+
+```bash
+python -m pip install -e '.[dev]'
+pytest
+```
