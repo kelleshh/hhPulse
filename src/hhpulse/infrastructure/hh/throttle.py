@@ -35,6 +35,7 @@ class AdaptiveThrottle:
         self._consecutive_successes = 0
         self._throttled_count = 0
         self._next_request_at = 0.0
+        self._blocked_until = 0.0
         self._pace_lock = asyncio.Lock()
         self._concurrency = asyncio.Semaphore(policy.max_concurrency)
 
@@ -53,7 +54,8 @@ class AdaptiveThrottle:
     async def _wait_for_global_pace(self) -> None:
         async with self._pace_lock:
             now = time.monotonic()
-            wait_seconds = max(0.0, self._next_request_at - now)
+            wait_until = max(self._next_request_at, self._blocked_until)
+            wait_seconds = max(0.0, wait_until - now)
             if wait_seconds:
                 await asyncio.sleep(wait_seconds)
             interval = self._multiplier / self._policy.max_rps
@@ -64,11 +66,19 @@ class AdaptiveThrottle:
         self._consecutive_successes = 0
         self._multiplier = min(self._max_multiplier, max(2.0, self._multiplier * 2.0))
         if retry_after_seconds is not None and retry_after_seconds > 0:
+            self._blocked_until = max(
+                self._blocked_until,
+                time.monotonic() + retry_after_seconds,
+            )
             minimum_multiplier = retry_after_seconds * self._policy.max_rps
             self._multiplier = min(
                 self._max_multiplier,
                 max(self._multiplier, minimum_multiplier),
             )
+
+    def on_unavailable(self) -> None:
+        self._consecutive_successes = 0
+        self._multiplier = min(self._max_multiplier, max(2.0, self._multiplier * 2.0))
 
     def on_success(self) -> None:
         self._consecutive_successes += 1

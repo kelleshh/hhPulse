@@ -1,14 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
-from typing import Sequence
 
 from hhpulse.application.ports.market_source import MarketSource
 from hhpulse.domain.entities import AnalysisJob
 from hhpulse.domain.enums import ExperienceBand, RoleSelectionMode, SearchTarget
 from hhpulse.domain.value_objects import ProfessionalRole, SearchQuery
-
 
 EXPERIENCE_STRATA: tuple[ExperienceBand, ...] = (
     ExperienceBand.ANY,

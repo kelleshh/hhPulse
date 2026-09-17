@@ -55,6 +55,8 @@ CREATE TABLE IF NOT EXISTS crawl_units (
     attempts INTEGER NOT NULL,
     updated_at TEXT,
     last_error TEXT,
+    retry_at TEXT,
+    worker_id TEXT,
     UNIQUE(run_id, query_json)
 );
 
@@ -95,6 +97,24 @@ class SqliteDatabase:
     def _initialize_sync(self) -> None:
         with self._connect() as connection:
             connection.executescript(_SCHEMA)
+            self._migrate(connection)
+
+    @staticmethod
+    def _migrate(connection: sqlite3.Connection) -> None:
+        columns = {
+            str(row["name"])
+            for row in connection.execute("PRAGMA table_info(crawl_units)").fetchall()
+        }
+        if "retry_at" not in columns:
+            connection.execute("ALTER TABLE crawl_units ADD COLUMN retry_at TEXT")
+        if "worker_id" not in columns:
+            connection.execute("ALTER TABLE crawl_units ADD COLUMN worker_id TEXT")
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_crawl_units_ready
+            ON crawl_units(run_id, status, retry_at)
+            """
+        )
 
     async def read(self, operation: Callable[[sqlite3.Connection], T]) -> T:
         return await asyncio.to_thread(self._run_sync, operation)

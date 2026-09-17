@@ -4,8 +4,9 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from hhpulse.application.ports.repositories import CrawlProgress
 from hhpulse.domain.entities import AnalysisJob
-from hhpulse.domain.enums import RoleSelectionMode, UserAgentMode
+from hhpulse.domain.enums import RoleSelectionMode, RunStatus, UserAgentMode
 
 
 class CreateJobRequest(BaseModel):
@@ -64,4 +65,46 @@ class JobResponse(BaseModel):
             enabled=job.enabled,
             created_at=job.created_at,
             updated_at=job.updated_at,
+        )
+
+
+class ManualRunResponse(BaseModel):
+    accepted: bool
+
+
+class RunProgressResponse(BaseModel):
+    run_id: str
+    status: RunStatus
+    total_units: int
+    completed_units: int
+    pending_units: int
+    running_units: int
+    waiting_retry_units: int
+    failed_units: int
+    total_attempts: int
+    next_retry_at: datetime | None
+    error_code: str | None
+    error_message: str | None
+
+    @classmethod
+    def from_domain(
+        cls,
+        progress: CrawlProgress,
+        *,
+        error_code: str | None,
+        error_message: str | None,
+    ) -> RunProgressResponse:
+        return cls(
+            run_id=progress.run_id,
+            status=progress.status,
+            total_units=progress.total_units,
+            completed_units=progress.completed_units,
+            pending_units=progress.pending_units,
+            running_units=progress.running_units,
+            waiting_retry_units=progress.waiting_retry_units,
+            failed_units=progress.failed_units,
+            total_attempts=progress.total_attempts,
+            next_retry_at=progress.next_retry_at,
+            error_code=error_code,
+            error_message=error_message,
         )

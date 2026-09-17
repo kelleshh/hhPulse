@@ -1,16 +1,19 @@
-class HhInfrastructureError(RuntimeError):
-    """Base error for HH transport/parser failures."""
+from hhpulse.application.errors import (
+    MarketSourceError,
+    MarketSourceThrottled,
+    MarketSourceUnavailable,
+    ParserContractBroken,
+)
+
+HhInfrastructureError = MarketSourceError
+HhSourceUnavailable = MarketSourceUnavailable
+HhThrottled = MarketSourceThrottled
+HhParserContractBroken = ParserContractBroken
 
 
-class HhSourceUnavailable(HhInfrastructureError):
-    """HH is temporarily unavailable and the current run should wait."""
-
-
-class HhThrottled(HhSourceUnavailable):
-    def __init__(self, message: str, *, retry_after_seconds: float | None = None) -> None:
-        super().__init__(message)
-        self.retry_after_seconds = retry_after_seconds
-
-
-class HhParserContractBroken(HhInfrastructureError):
-    """Returned HTML no longer satisfies the parser contract."""
+__all__ = [
+    "HhInfrastructureError",
+    "HhParserContractBroken",
+    "HhSourceUnavailable",
+    "HhThrottled",
+]

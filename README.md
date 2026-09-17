@@ -1,7 +1,63 @@
-# hhPulse
+# hhPulse — personal fork
 
 Локальный сервис для ежедневного измерения конкуренции на рынке труда через агрегированные
-счётчики поисковой выдачи hh.ru. 
+счётчики поисковой выдачи hh.ru. В этой ветке **не скачиваются отдельные вакансии и резюме**:
+источником фактов являются только уже рассчитанные hh.ru числа из HTML поисковых страниц.
+
+## Что реализовано
+
+- DDD/Clean Architecture: `domain -> application -> infrastructure -> api`.
+- Доменные модели задач анализа, дневных прогонов, crawl-unit, HH-индекса и снимка рынка.
+- Версионируемая методология `hh-index-daily-v1`: активные резюме за последние 60 календарных
+  дней, вакансии — активные на день наблюдения.
+- Динамическое получение полного каталога professional roles через официальный справочник
+  `GET https://api.hh.ru/professional_roles`, без списка ID в коде. Facet `professional_role`
+  используется только как метрика текущей выдачи и не может молча выкинуть роли с нулём вакансий.
+- HTML parser, который извлекает:
+  - общее число найденных вакансий/резюме;
+  - весь `searchClusters` и его facet counts;
+  - `professional_role` как обычный facet текущей выдачи, без использования его как полного каталога.
+- Async HH transport на `httpx` с пользовательскими `max_concurrency` и `max_rps`.
+- Адаптивный backoff: 429/502/503/504 только замедляют клиент; лимит пользователя никогда не
+  превышается.
+- Режим User-Agent: один на все worker-ы или детерминированный UA на worker.
+- Persisted control-plane на SQLite/WAL: задачи, дневные run-ы, crawl-unit-ы.
+- Staging/publish модель: частичный run можно сохранять и продолжать после рестарта, а в
+  published history он попадает только целиком.
+- FastAPI endpoints для создания, чтения, списка и включения/выключения задач.
+- Исполняемое ядро второй итерации:
+  - `PrepareOrResumeDailyRun` с тремя последовательными preflight-проверками;
+  - атомарное создание persisted crawl units;
+  - async worker pool с атомарным claim каждой единицы работы;
+  - persisted retry timestamp и adaptive backoff после 429/временных ошибок;
+  - автоматическое восстановление `RUNNING` units после рестарта;
+  - ожидание доступности HH до полуночи соответствующего дня;
+  - немедленный `PARSER_CONTRACT_BROKEN` без публикации частичного snapshot;
+  - приватный HTML quarantine с ограничением размера и retention 24 часа;
+  - единая транзакция `validate staging -> publish -> SUCCEEDED`;
+  - постоянно работающий daily scheduler внутри API-процесса.
+- API ручного запуска/возобновления и чтения текущего прогресса:
+  `POST/GET /api/v1/jobs/{job_id}/runs/today`.
+- Docker Compose для локального запуска и persistent volume.
+- 43 автоматических теста на доменные инварианты, parser contract, полный role catalog,
+  60-дневную методологию,
+  rate/backoff, конкурентный claim, restart recovery, midnight expiry, persistence, staging,
+  атомарную публикацию, scheduler и API.
+
+## Архитектура
+
+```text
+src/hhpulse/
+├── domain/          # сущности, value objects, инварианты, state transitions
+├── application/     # use cases и порты
+├── infrastructure/  # HH HTML adapter, transport, SQLite adapters
+└── api/             # HTTP boundary для будущего web UI
+```
+
+Зависимости направлены внутрь. `domain` не знает о FastAPI, SQLite, httpx и hh.ru HTML.
+`application` зависит только от domain и Protocol-портов. Реализации находятся в `infrastructure`.
+
+Подробно: [`docs/architecture.md`](docs/architecture.md).
 
 ## Локальный запуск
 
@@ -33,3 +89,11 @@ curl -X POST http://localhost:8080/api/v1/jobs \
 python -m pip install -e '.[dev]'
 pytest
 ```
+
+## Что намеренно не сделано в этой итерации
+
+Исполняемое ядро завершено, но пока нет Telegram/Prometheus/Grafana, WebSocket progress,
+аналитических read models, dashboard API и frontend. Текущий REST progress endpoint уже отдаёт
+persisted состояние; live push и визуализация относятся к следующей итерации.
+
+Исполнение и аварийные гарантии описаны в [`docs/iteration-2.md`](docs/iteration-2.md).

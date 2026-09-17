@@ -2,17 +2,17 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import date, datetime
-from typing import Sequence
+from collections.abc import Sequence
+from datetime import UTC, date, datetime
 
 from hhpulse.application.ports.repositories import (
     AnalysisJobRepository,
-    CrawlRunRepository,
-    CrawlUnitRepository,
-    ObservationRepository,
+    CrawlExecutionRepository,
+    CrawlProgress,
 )
 from hhpulse.domain.entities import AnalysisJob, AnalysisScope, CrawlRun, CrawlUnit
 from hhpulse.domain.enums import RoleSelectionMode, RunStatus, RunUnitStatus, UserAgentMode
+from hhpulse.domain.errors import InvalidStateTransition
 from hhpulse.domain.value_objects import (
     DailySchedule,
     Methodology,
@@ -50,7 +50,8 @@ class SqliteAnalysisJobRepository(AnalysisJobRepository):
     async def get(self, job_id: str) -> AnalysisJob | None:
         def operation(connection: sqlite3.Connection) -> AnalysisJob | None:
             row = connection.execute(
-                "SELECT * FROM analysis_jobs WHERE id = ?", (job_id,)
+                "SELECT * FROM analysis_jobs WHERE id = ?",
+                (job_id,),
             ).fetchone()
             return self._from_row(row) if row is not None else None
 
@@ -76,7 +77,7 @@ class SqliteAnalysisJobRepository(AnalysisJobRepository):
                     active_resume_window_days = ?, enabled = ?, created_at = ?, updated_at = ?
                 WHERE id = ?
                 """,
-                self._to_update_row(job),
+                (*self._to_row(job)[1:], job.id),
             )
             if cursor.rowcount != 1:
                 raise KeyError(f"analysis job {job.id!r} does not exist")
@@ -102,11 +103,6 @@ class SqliteAnalysisJobRepository(AnalysisJobRepository):
             job.created_at.isoformat(),
             job.updated_at.isoformat(),
         )
-
-    @classmethod
-    def _to_update_row(cls, job: AnalysisJob) -> tuple[object, ...]:
-        row = cls._to_row(job)
-        return (*row[1:], job.id)
 
     @staticmethod
     def _from_row(row: sqlite3.Row) -> AnalysisJob:
@@ -135,186 +131,179 @@ class SqliteAnalysisJobRepository(AnalysisJobRepository):
         )
 
 
-class SqliteCrawlRunRepository(CrawlRunRepository):
+class SqliteCrawlExecutionRepository(CrawlExecutionRepository):
     def __init__(self, database: SqliteDatabase) -> None:
         self._database = database
 
-    async def add(self, run: CrawlRun) -> None:
-        def operation(connection: sqlite3.Connection) -> None:
+    async def get_or_create(self, run: CrawlRun) -> CrawlRun:
+        if run.status is not RunStatus.PLANNED:
+            raise ValueError("get_or_create accepts only a planned run")
+
+        def operation(connection: sqlite3.Connection) -> CrawlRun:
             connection.execute(
                 """
-                INSERT INTO crawl_runs (
+                INSERT OR IGNORE INTO crawl_runs (
                     id, job_id, observation_date, status, total_units, completed_units,
                     started_at, finished_at, error_code, error_message
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                self._to_row(run),
+                self._run_to_row(run),
             )
+            row = connection.execute(
+                "SELECT * FROM crawl_runs WHERE job_id = ? AND observation_date = ?",
+                (run.job_id, run.observation_date.isoformat()),
+            ).fetchone()
+            if row is None:
+                raise RuntimeError("failed to create or load daily crawl run")
+            return self._run_from_row(row)
 
-        await self._database.write(operation)
+        return await self._database.write(operation)
 
     async def get(self, run_id: str) -> CrawlRun | None:
         def operation(connection: sqlite3.Connection) -> CrawlRun | None:
-            row = connection.execute("SELECT * FROM crawl_runs WHERE id = ?", (run_id,)).fetchone()
-            return self._from_row(row) if row is not None else None
+            row = connection.execute(
+                "SELECT * FROM crawl_runs WHERE id = ?",
+                (run_id,),
+            ).fetchone()
+            return self._run_from_row(row) if row is not None else None
 
         return await self._database.read(operation)
 
-    async def get_for_job_date(self, job_id: str, observation_date: date) -> CrawlRun | None:
+    async def get_for_job_date(
+        self,
+        job_id: str,
+        observation_date: date,
+    ) -> CrawlRun | None:
         def operation(connection: sqlite3.Connection) -> CrawlRun | None:
             row = connection.execute(
                 "SELECT * FROM crawl_runs WHERE job_id = ? AND observation_date = ?",
                 (job_id, observation_date.isoformat()),
             ).fetchone()
-            return self._from_row(row) if row is not None else None
+            return self._run_from_row(row) if row is not None else None
 
         return await self._database.read(operation)
 
-    async def update(self, run: CrawlRun) -> None:
-        def operation(connection: sqlite3.Connection) -> None:
-            cursor = connection.execute(
-                """
-                UPDATE crawl_runs SET
-                    job_id = ?, observation_date = ?, status = ?, total_units = ?,
-                    completed_units = ?, started_at = ?, finished_at = ?, error_code = ?,
-                    error_message = ?
-                WHERE id = ?
-                """,
-                (*self._to_row(run)[1:], run.id),
-            )
-            if cursor.rowcount != 1:
-                raise KeyError(f"crawl run {run.id!r} does not exist")
+    async def initialize(self, run: CrawlRun, units: Sequence[CrawlUnit]) -> CrawlRun:
+        if run.status is not RunStatus.RUNNING or run.total_units != len(units):
+            raise ValueError("initialized run must be running and match its unit count")
+        if any(unit.run_id != run.id for unit in units):
+            raise ValueError("every crawl unit must belong to the initialized run")
 
-        await self._database.write(operation)
-
-    @staticmethod
-    def _to_row(run: CrawlRun) -> tuple[object, ...]:
-        return (
-            run.id,
-            run.job_id,
-            run.observation_date.isoformat(),
-            run.status.value,
-            run.total_units,
-            run.completed_units,
-            run.started_at.isoformat() if run.started_at else None,
-            run.finished_at.isoformat() if run.finished_at else None,
-            run.error_code,
-            run.error_message,
-        )
-
-    @staticmethod
-    def _from_row(row: sqlite3.Row) -> CrawlRun:
-        started_at = str(row["started_at"]) if row["started_at"] is not None else None
-        finished_at = str(row["finished_at"]) if row["finished_at"] is not None else None
-        return CrawlRun(
-            id=str(row["id"]),
-            job_id=str(row["job_id"]),
-            observation_date=date.fromisoformat(str(row["observation_date"])),
-            status=RunStatus(str(row["status"])),
-            total_units=int(row["total_units"]),
-            completed_units=int(row["completed_units"]),
-            started_at=datetime.fromisoformat(started_at) if started_at else None,
-            finished_at=datetime.fromisoformat(finished_at) if finished_at else None,
-            error_code=str(row["error_code"]) if row["error_code"] is not None else None,
-            error_message=str(row["error_message"]) if row["error_message"] is not None else None,
-        )
-
-
-class SqliteCrawlUnitRepository(CrawlUnitRepository):
-    def __init__(self, database: SqliteDatabase) -> None:
-        self._database = database
-
-    async def add_many(self, units: Sequence[CrawlUnit]) -> None:
-        if not units:
-            return
-
-        def operation(connection: sqlite3.Connection) -> None:
+        def operation(connection: sqlite3.Connection) -> CrawlRun:
+            current = self._require_run(connection, run.id)
+            if current.status is not RunStatus.PLANNED:
+                return current
+            unit_count = self._unit_count(connection, run.id)
+            if unit_count:
+                raise RuntimeError("planned run unexpectedly already contains crawl units")
+            self._update_run(connection, run)
             connection.executemany(
                 """
                 INSERT INTO crawl_units (
-                    id, run_id, query_json, status, attempts, updated_at, last_error
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    id, run_id, query_json, status, attempts, updated_at, last_error,
+                    retry_at, worker_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                [self._to_row(unit) for unit in units],
+                [self._unit_to_row(unit) for unit in units],
             )
+            return run
 
-        await self._database.write(operation)
+        return await self._database.write(operation)
 
-    async def list_for_run(self, run_id: str) -> Sequence[CrawlUnit]:
-        def operation(connection: sqlite3.Connection) -> tuple[CrawlUnit, ...]:
+    async def recover_interrupted(self, run_id: str, *, at: datetime) -> int:
+        def operation(connection: sqlite3.Connection) -> int:
+            run = self._require_active_run(connection, run_id)
             rows = connection.execute(
-                "SELECT * FROM crawl_units WHERE run_id = ? ORDER BY id", (run_id,)
+                "SELECT * FROM crawl_units WHERE run_id = ? AND status = ?",
+                (run_id, RunUnitStatus.RUNNING.value),
             ).fetchall()
-            return tuple(self._from_row(row) for row in rows)
+            for row in rows:
+                recovered = self._unit_from_row(row).recover_interrupted(at=at)
+                self._update_unit(connection, recovered)
+            if rows and run.status is RunStatus.RUNNING:
+                self._update_run(connection, run.wait_for_source())
+            return len(rows)
 
-        return await self._database.read(operation)
+        return await self._database.write(operation)
 
-    async def list_incomplete_for_run(self, run_id: str) -> Sequence[CrawlUnit]:
-        terminal = (RunUnitStatus.SUCCEEDED.value, RunUnitStatus.FAILED.value)
+    async def claim_next_ready(
+        self,
+        run_id: str,
+        *,
+        worker_id: str,
+        at: datetime,
+    ) -> CrawlUnit | None:
+        if not worker_id.strip():
+            raise ValueError("worker id must not be empty")
 
-        def operation(connection: sqlite3.Connection) -> tuple[CrawlUnit, ...]:
-            rows = connection.execute(
-                """
-                SELECT * FROM crawl_units
-                WHERE run_id = ? AND status NOT IN (?, ?)
-                ORDER BY id
-                """,
-                (run_id, *terminal),
-            ).fetchall()
-            return tuple(self._from_row(row) for row in rows)
-
-        return await self._database.read(operation)
-
-    async def update(self, unit: CrawlUnit) -> None:
-        def operation(connection: sqlite3.Connection) -> None:
-            cursor = connection.execute(
+        def operation(connection: sqlite3.Connection) -> CrawlUnit | None:
+            run = self._require_active_run(connection, run_id)
+            row = connection.execute(
                 """
                 UPDATE crawl_units SET
-                    run_id = ?, query_json = ?, status = ?, attempts = ?,
-                    updated_at = ?, last_error = ?
-                WHERE id = ?
+                    status = ?, attempts = attempts + 1, updated_at = ?,
+                    last_error = NULL, retry_at = NULL, worker_id = ?
+                WHERE id = (
+                    SELECT id FROM crawl_units
+                    WHERE run_id = ? AND (
+                        status = ? OR (status = ? AND (retry_at IS NULL OR retry_at <= ?))
+                    )
+                    ORDER BY id
+                    LIMIT 1
+                )
+                RETURNING *
                 """,
-                (*self._to_row(unit)[1:], unit.id),
-            )
-            if cursor.rowcount != 1:
-                raise KeyError(f"crawl unit {unit.id!r} does not exist")
+                (
+                    RunUnitStatus.RUNNING.value,
+                    self._datetime_to_db(at),
+                    worker_id,
+                    run_id,
+                    RunUnitStatus.PENDING.value,
+                    RunUnitStatus.WAITING_RETRY.value,
+                    self._datetime_to_db(at),
+                ),
+            ).fetchone()
+            if row is None:
+                return None
+            claimed = self._unit_from_row(row)
+            if run.status is RunStatus.WAITING_SOURCE:
+                self._update_run(connection, run.resume())
+            return claimed
+
+        return await self._database.write(operation)
+
+    async def defer_unit(
+        self,
+        unit_id: str,
+        *,
+        error: str,
+        retry_at: datetime,
+        at: datetime,
+    ) -> None:
+        def operation(connection: sqlite3.Connection) -> None:
+            unit = self._require_unit(connection, unit_id)
+            run = self._require_active_run(connection, unit.run_id)
+            deferred = unit.wait_retry(error=error, retry_at=retry_at, at=at)
+            self._update_unit(connection, deferred)
+            if run.status is RunStatus.RUNNING:
+                self._update_run(connection, run.wait_for_source())
 
         await self._database.write(operation)
 
-    @staticmethod
-    def _to_row(unit: CrawlUnit) -> tuple[object, ...]:
-        return (
-            unit.id,
-            unit.run_id,
-            query_to_json(unit.query),
-            unit.status.value,
-            unit.attempts,
-            unit.updated_at.isoformat() if unit.updated_at else None,
-            unit.last_error,
-        )
-
-    @staticmethod
-    def _from_row(row: sqlite3.Row) -> CrawlUnit:
-        updated_at = str(row["updated_at"]) if row["updated_at"] is not None else None
-        return CrawlUnit(
-            id=str(row["id"]),
-            run_id=str(row["run_id"]),
-            query=query_from_json(str(row["query_json"])),
-            status=RunUnitStatus(str(row["status"])),
-            attempts=int(row["attempts"]),
-            updated_at=datetime.fromisoformat(updated_at) if updated_at else None,
-            last_error=str(row["last_error"]) if row["last_error"] is not None else None,
-        )
-
-
-class SqliteObservationRepository(ObservationRepository):
-    def __init__(self, database: SqliteDatabase) -> None:
-        self._database = database
-
-    async def stage(self, run_id: str, unit_id: str, observation: SearchObservation) -> None:
-        payload = observation_to_json(observation)
-
-        def operation(connection: sqlite3.Connection) -> None:
+    async def complete_unit(
+        self,
+        unit_id: str,
+        observation: SearchObservation,
+        *,
+        at: datetime,
+    ) -> CrawlRun:
+        def operation(connection: sqlite3.Connection) -> CrawlRun:
+            unit = self._require_unit(connection, unit_id)
+            run = self._require_active_run(connection, unit.run_id)
+            if observation.query != unit.query:
+                raise ValueError("observation query does not match the claimed crawl unit")
+            completed_unit = unit.succeed(at=at)
+            completed_run = run.mark_unit_completed()
             connection.execute(
                 """
                 INSERT INTO staged_search_observations (run_id, unit_id, observation_json)
@@ -322,42 +311,71 @@ class SqliteObservationRepository(ObservationRepository):
                 ON CONFLICT(run_id, unit_id) DO UPDATE SET
                     observation_json = excluded.observation_json
                 """,
-                (run_id, unit_id, payload),
+                (run.id, unit.id, observation_to_json(observation)),
             )
+            self._update_unit(connection, completed_unit)
+            self._update_run(connection, completed_run)
+            return completed_run
 
-        await self._database.write(operation)
+        return await self._database.write(operation)
 
-    async def publish_run(self, run_id: str) -> None:
-        """Atomically promotes every staged observation for a completed run."""
+    async def abort_parser(
+        self,
+        run_id: str,
+        *,
+        message: str,
+        at: datetime,
+    ) -> CrawlRun:
+        def operation(connection: sqlite3.Connection) -> CrawlRun:
+            run = self._require_run(connection, run_id)
+            broken = run.parser_broken(message=message, at=at)
+            self._cancel_incomplete_units(connection, run_id, message, at)
+            self._update_run(connection, broken)
+            return broken
 
-        def operation(connection: sqlite3.Connection) -> None:
-            run = connection.execute(
-                "SELECT status, total_units, completed_units FROM crawl_runs WHERE id = ?",
-                (run_id,),
-            ).fetchone()
-            if run is None:
-                raise KeyError(f"crawl run {run_id!r} does not exist")
-            if str(run["status"]) != RunStatus.SUCCEEDED.value:
-                raise ValueError("only a succeeded run can be published")
-            if int(run["completed_units"]) != int(run["total_units"]):
-                raise ValueError("cannot publish an incomplete run")
+        return await self._database.write(operation)
 
-            staged_count = int(
-                connection.execute(
-                    "SELECT COUNT(*) FROM staged_search_observations WHERE run_id = ?",
-                    (run_id,),
-                ).fetchone()[0]
-            )
-            if staged_count != int(run["total_units"]):
-                raise ValueError(
-                    f"staged observation count {staged_count} does not match run total "
-                    f"{int(run['total_units'])}"
-                )
+    async def fail_run(
+        self,
+        run_id: str,
+        *,
+        code: str,
+        message: str,
+        at: datetime,
+    ) -> CrawlRun:
+        def operation(connection: sqlite3.Connection) -> CrawlRun:
+            run = self._require_run(connection, run_id)
+            failed = run.fail(code=code, message=message, at=at)
+            self._cancel_incomplete_units(connection, run_id, message, at)
+            self._update_run(connection, failed)
+            return failed
 
-            published_at = datetime.now().astimezone().isoformat()
+        return await self._database.write(operation)
+
+    async def expire_run(self, run_id: str, *, at: datetime) -> CrawlRun:
+        def operation(connection: sqlite3.Connection) -> CrawlRun:
+            run = self._require_run(connection, run_id)
+            expired = run.expire(at=at)
+            message = expired.error_message or "daily crawl expired"
+            self._cancel_incomplete_units(connection, run_id, message, at)
+            self._update_run(connection, expired)
+            return expired
+
+        return await self._database.write(operation)
+
+    async def publish_completed(self, run_id: str, *, at: datetime) -> CrawlRun:
+        def operation(connection: sqlite3.Connection) -> CrawlRun:
+            run = self._require_run(connection, run_id)
+            if run.status is RunStatus.SUCCEEDED:
+                self._assert_published(connection, run)
+                return run
+            self._assert_ready_to_publish(connection, run)
+            succeeded = run.succeed(at=at)
             connection.execute(
                 """
-                INSERT INTO search_observations (run_id, unit_id, observation_json, published_at)
+                INSERT INTO search_observations (
+                    run_id, unit_id, observation_json, published_at
+                )
                 SELECT run_id, unit_id, observation_json, ?
                 FROM staged_search_observations
                 WHERE run_id = ?
@@ -365,18 +383,243 @@ class SqliteObservationRepository(ObservationRepository):
                     observation_json = excluded.observation_json,
                     published_at = excluded.published_at
                 """,
-                (published_at, run_id),
+                (self._datetime_to_db(at), run_id),
             )
             connection.execute(
-                "DELETE FROM staged_search_observations WHERE run_id = ?", (run_id,)
+                "DELETE FROM staged_search_observations WHERE run_id = ?",
+                (run_id,),
+            )
+            self._update_run(connection, succeeded)
+            return succeeded
+
+        return await self._database.write(operation)
+
+    async def progress(self, run_id: str) -> CrawlProgress:
+        def operation(connection: sqlite3.Connection) -> CrawlProgress:
+            run = self._require_run(connection, run_id)
+            rows = connection.execute(
+                """
+                SELECT status, COUNT(*) AS amount, COALESCE(SUM(attempts), 0) AS attempts
+                FROM crawl_units WHERE run_id = ? GROUP BY status
+                """,
+                (run_id,),
+            ).fetchall()
+            counts = {str(row["status"]): int(row["amount"]) for row in rows}
+            attempts = sum(int(row["attempts"]) for row in rows)
+            retry_row = connection.execute(
+                """
+                SELECT MIN(retry_at) FROM crawl_units
+                WHERE run_id = ? AND status = ?
+                """,
+                (run_id, RunUnitStatus.WAITING_RETRY.value),
+            ).fetchone()
+            retry_value = retry_row[0] if retry_row is not None else None
+            return CrawlProgress(
+                run_id=run.id,
+                status=run.status,
+                total_units=run.total_units,
+                completed_units=run.completed_units,
+                pending_units=counts.get(RunUnitStatus.PENDING.value, 0),
+                running_units=counts.get(RunUnitStatus.RUNNING.value, 0),
+                waiting_retry_units=counts.get(RunUnitStatus.WAITING_RETRY.value, 0),
+                failed_units=counts.get(RunUnitStatus.FAILED.value, 0),
+                total_attempts=attempts,
+                next_retry_at=self._datetime_from_db(retry_value),
             )
 
-        await self._database.write(operation)
+        return await self._database.read(operation)
 
-    async def discard_staging(self, run_id: str) -> None:
-        def operation(connection: sqlite3.Connection) -> None:
+    async def list_units(self, run_id: str) -> Sequence[CrawlUnit]:
+        def operation(connection: sqlite3.Connection) -> tuple[CrawlUnit, ...]:
+            rows = connection.execute(
+                "SELECT * FROM crawl_units WHERE run_id = ? ORDER BY id",
+                (run_id,),
+            ).fetchall()
+            return tuple(self._unit_from_row(row) for row in rows)
+
+        return await self._database.read(operation)
+
+    def _assert_ready_to_publish(self, connection: sqlite3.Connection, run: CrawlRun) -> None:
+        if run.status not in {RunStatus.RUNNING, RunStatus.WAITING_SOURCE}:
+            raise InvalidStateTransition(f"cannot publish run from {run.status}")
+        succeeded_units = int(
             connection.execute(
-                "DELETE FROM staged_search_observations WHERE run_id = ?", (run_id,)
+                "SELECT COUNT(*) FROM crawl_units WHERE run_id = ? AND status = ?",
+                (run.id, RunUnitStatus.SUCCEEDED.value),
+            ).fetchone()[0]
+        )
+        staged = int(
+            connection.execute(
+                "SELECT COUNT(*) FROM staged_search_observations WHERE run_id = ?",
+                (run.id,),
+            ).fetchone()[0]
+        )
+        expected = run.total_units
+        if run.completed_units != expected or succeeded_units != expected or staged != expected:
+            raise InvalidStateTransition(
+                "cannot publish until run counters, succeeded units and staging all match"
             )
 
-        await self._database.write(operation)
+    @staticmethod
+    def _assert_published(connection: sqlite3.Connection, run: CrawlRun) -> None:
+        published = int(
+            connection.execute(
+                "SELECT COUNT(*) FROM search_observations WHERE run_id = ?",
+                (run.id,),
+            ).fetchone()[0]
+        )
+        if published != run.total_units:
+            raise RuntimeError("succeeded run is missing published observations")
+
+    def _cancel_incomplete_units(
+        self,
+        connection: sqlite3.Connection,
+        run_id: str,
+        message: str,
+        at: datetime,
+    ) -> None:
+        rows = connection.execute(
+            """
+            SELECT * FROM crawl_units
+            WHERE run_id = ? AND status NOT IN (?, ?)
+            """,
+            (run_id, RunUnitStatus.SUCCEEDED.value, RunUnitStatus.FAILED.value),
+        ).fetchall()
+        for row in rows:
+            self._update_unit(connection, self._unit_from_row(row).cancel(error=message, at=at))
+
+    @staticmethod
+    def _unit_count(connection: sqlite3.Connection, run_id: str) -> int:
+        return int(
+            connection.execute(
+                "SELECT COUNT(*) FROM crawl_units WHERE run_id = ?",
+                (run_id,),
+            ).fetchone()[0]
+        )
+
+    def _require_active_run(self, connection: sqlite3.Connection, run_id: str) -> CrawlRun:
+        run = self._require_run(connection, run_id)
+        if run.status not in {RunStatus.RUNNING, RunStatus.WAITING_SOURCE}:
+            raise InvalidStateTransition(f"run {run_id!r} is not active: {run.status}")
+        return run
+
+    def _require_run(self, connection: sqlite3.Connection, run_id: str) -> CrawlRun:
+        row = connection.execute(
+            "SELECT * FROM crawl_runs WHERE id = ?",
+            (run_id,),
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"crawl run {run_id!r} does not exist")
+        return self._run_from_row(row)
+
+    def _require_unit(self, connection: sqlite3.Connection, unit_id: str) -> CrawlUnit:
+        row = connection.execute(
+            "SELECT * FROM crawl_units WHERE id = ?",
+            (unit_id,),
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"crawl unit {unit_id!r} does not exist")
+        return self._unit_from_row(row)
+
+    @classmethod
+    def _update_run(cls, connection: sqlite3.Connection, run: CrawlRun) -> None:
+        cursor = connection.execute(
+            """
+            UPDATE crawl_runs SET
+                job_id = ?, observation_date = ?, status = ?, total_units = ?,
+                completed_units = ?, started_at = ?, finished_at = ?, error_code = ?,
+                error_message = ?
+            WHERE id = ?
+            """,
+            (*cls._run_to_row(run)[1:], run.id),
+        )
+        if cursor.rowcount != 1:
+            raise KeyError(f"crawl run {run.id!r} does not exist")
+
+    @classmethod
+    def _update_unit(cls, connection: sqlite3.Connection, unit: CrawlUnit) -> None:
+        cursor = connection.execute(
+            """
+            UPDATE crawl_units SET
+                run_id = ?, query_json = ?, status = ?, attempts = ?, updated_at = ?,
+                last_error = ?, retry_at = ?, worker_id = ?
+            WHERE id = ?
+            """,
+            (*cls._unit_to_row(unit)[1:], unit.id),
+        )
+        if cursor.rowcount != 1:
+            raise KeyError(f"crawl unit {unit.id!r} does not exist")
+
+    @classmethod
+    def _run_to_row(cls, run: CrawlRun) -> tuple[object, ...]:
+        return (
+            run.id,
+            run.job_id,
+            run.observation_date.isoformat(),
+            run.status.value,
+            run.total_units,
+            run.completed_units,
+            cls._datetime_to_db(run.started_at),
+            cls._datetime_to_db(run.finished_at),
+            run.error_code,
+            run.error_message,
+        )
+
+    @staticmethod
+    def _run_from_row(row: sqlite3.Row) -> CrawlRun:
+        return CrawlRun(
+            id=str(row["id"]),
+            job_id=str(row["job_id"]),
+            observation_date=date.fromisoformat(str(row["observation_date"])),
+            status=RunStatus(str(row["status"])),
+            total_units=int(row["total_units"]),
+            completed_units=int(row["completed_units"]),
+            started_at=SqliteCrawlExecutionRepository._datetime_from_db(row["started_at"]),
+            finished_at=SqliteCrawlExecutionRepository._datetime_from_db(row["finished_at"]),
+            error_code=str(row["error_code"]) if row["error_code"] is not None else None,
+            error_message=(
+                str(row["error_message"]) if row["error_message"] is not None else None
+            ),
+        )
+
+    @classmethod
+    def _unit_to_row(cls, unit: CrawlUnit) -> tuple[object, ...]:
+        return (
+            unit.id,
+            unit.run_id,
+            query_to_json(unit.query),
+            unit.status.value,
+            unit.attempts,
+            cls._datetime_to_db(unit.updated_at),
+            unit.last_error,
+            cls._datetime_to_db(unit.retry_at),
+            unit.worker_id,
+        )
+
+    @staticmethod
+    def _unit_from_row(row: sqlite3.Row) -> CrawlUnit:
+        return CrawlUnit(
+            id=str(row["id"]),
+            run_id=str(row["run_id"]),
+            query=query_from_json(str(row["query_json"])),
+            status=RunUnitStatus(str(row["status"])),
+            attempts=int(row["attempts"]),
+            updated_at=SqliteCrawlExecutionRepository._datetime_from_db(row["updated_at"]),
+            last_error=str(row["last_error"]) if row["last_error"] is not None else None,
+            retry_at=SqliteCrawlExecutionRepository._datetime_from_db(row["retry_at"]),
+            worker_id=str(row["worker_id"]) if row["worker_id"] is not None else None,
+        )
+
+    @staticmethod
+    def _datetime_to_db(value: datetime | None) -> str | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            raise ValueError("persisted datetime must be timezone-aware")
+        return value.astimezone(UTC).isoformat()
+
+    @staticmethod
+    def _datetime_from_db(value: object) -> datetime | None:
+        if value is None:
+            return None
+        return datetime.fromisoformat(str(value))

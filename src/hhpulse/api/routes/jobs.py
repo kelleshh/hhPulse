@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from hhpulse.api.dependencies import get_container
@@ -15,12 +17,13 @@ from hhpulse.bootstrap import Container
 from hhpulse.domain.errors import DomainError
 
 router = APIRouter(prefix="/api/v1/jobs", tags=["jobs"])
+ContainerDependency = Annotated[Container, Depends(get_container)]
 
 
 @router.post("", response_model=JobResponse, status_code=status.HTTP_201_CREATED)
 async def create_job(
     request: CreateJobRequest,
-    container: Container = Depends(get_container),
+    container: ContainerDependency,
 ) -> JobResponse:
     use_case = CreateAnalysisJob(container.jobs, container.clock)
     command = CreateAnalysisJobCommand(
@@ -43,7 +46,7 @@ async def create_job(
 
 
 @router.get("", response_model=list[JobResponse])
-async def list_jobs(container: Container = Depends(get_container)) -> list[JobResponse]:
+async def list_jobs(container: ContainerDependency) -> list[JobResponse]:
     jobs = await ListAnalysisJobs(container.jobs).execute()
     return [JobResponse.from_domain(job) for job in jobs]
 
@@ -51,7 +54,7 @@ async def list_jobs(container: Container = Depends(get_container)) -> list[JobRe
 @router.get("/{job_id}", response_model=JobResponse)
 async def get_job(
     job_id: str,
-    container: Container = Depends(get_container),
+    container: ContainerDependency,
 ) -> JobResponse:
     job = await GetAnalysisJob(container.jobs).execute(job_id)
     if job is None:
@@ -63,7 +66,7 @@ async def get_job(
 async def set_job_enabled(
     job_id: str,
     request: SetJobEnabledRequest,
-    container: Container = Depends(get_container),
+    container: ContainerDependency,
 ) -> JobResponse:
     job = await SetAnalysisJobEnabled(container.jobs, container.clock).execute(
         job_id,

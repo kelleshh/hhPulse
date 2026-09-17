@@ -6,6 +6,8 @@ services:
       HHPULSE_DB_PATH: /data/hhpulse.sqlite3
       HHPULSE_HOST: 0.0.0.0
       HHPULSE_PORT: 8080
+      HHPULSE_QUARANTINE_DIR: /data/quarantine
+      HHPULSE_PREFLIGHT_SUCCESSES: 3
     ports:
       - "127.0.0.1:8080:8080"
     volumes:

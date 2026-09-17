@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from hhpulse.api.app import create_app
 from hhpulse.bootstrap import Container
 from hhpulse.config import Settings
-from hhpulse.domain.entities import AnalysisJob, CrawlRun
+from hhpulse.domain.entities import AnalysisJob
 
 
 class FakeClock:
@@ -34,53 +34,33 @@ class InMemoryJobs:
         self.items[job.id] = job
 
 
-class InMemoryRuns:
-    async def add(self, run: CrawlRun) -> None:
-        return None
-
-    async def get(self, run_id: str) -> CrawlRun | None:
-        return None
-
-    async def get_for_job_date(self, job_id: str, observation_date: date) -> CrawlRun | None:
-        return None
-
-    async def update(self, run: CrawlRun) -> None:
+class UnusedExecutions:
+    async def get_for_job_date(self, job_id, observation_date):
         return None
 
 
-class InMemoryUnits:
-    async def add_many(self, units):
+class FakeScheduler:
+    def __init__(self) -> None:
+        self.triggers: list[str] = []
+
+    async def start(self) -> None:
         return None
 
-    async def list_for_run(self, run_id: str):
-        return ()
-
-    async def list_incomplete_for_run(self, run_id: str):
-        return ()
-
-    async def update(self, unit):
+    async def stop(self) -> None:
         return None
 
-
-class InMemoryObservations:
-    async def stage(self, run_id: str, unit_id: str, observation):
-        return None
-
-    async def publish_run(self, run_id: str):
-        return None
-
-    async def discard_staging(self, run_id: str):
-        return None
+    async def trigger(self, job_id: str) -> bool:
+        self.triggers.append(job_id)
+        return True
 
 
-def _client() -> TestClient:
+def _client(*, scheduler=None) -> TestClient:
     container = Container(
         settings=Settings(db_path=":memory:"),
         clock=FakeClock(),
         jobs=InMemoryJobs(),
-        runs=InMemoryRuns(),
-        units=InMemoryUnits(),
-        observations=InMemoryObservations(),
+        executions=UnusedExecutions(),
+        scheduler=scheduler,
     )
     return TestClient(create_app(container=container))
 
@@ -129,3 +109,17 @@ def test_all_role_mode_rejects_explicit_role_ids() -> None:
         )
         assert response.status_code == 422
         assert "must not contain explicit role" in response.json()["detail"]
+
+
+def test_manual_run_endpoint_delegates_to_scheduler() -> None:
+    scheduler = FakeScheduler()
+    with _client(scheduler=scheduler) as client:
+        created = client.post(
+            "/api/v1/jobs",
+            json={"name": "Москва", "region_ids": ["1"]},
+        ).json()
+        response = client.post(f"/api/v1/jobs/{created['id']}/runs/today")
+
+    assert response.status_code == 202
+    assert response.json() == {"accepted": True}
+    assert scheduler.triggers == [created["id"]]

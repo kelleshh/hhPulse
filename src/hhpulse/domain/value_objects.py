@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date
-from typing import Iterable
 
 from hhpulse.domain.enums import ExperienceBand, SearchTarget
 from hhpulse.domain.errors import DomainError
@@ -42,6 +42,30 @@ class RateLimitPolicy:
             raise DomainError("max_concurrency must be >= 1")
         if self.max_rps <= 0:
             raise DomainError("max_rps must be > 0")
+
+
+@dataclass(frozen=True, slots=True)
+class RetryPolicy:
+    initial_delay_seconds: float = 5.0
+    max_delay_seconds: float = 900.0
+
+    def __post_init__(self) -> None:
+        if self.initial_delay_seconds <= 0:
+            raise DomainError("initial retry delay must be positive")
+        if self.max_delay_seconds < self.initial_delay_seconds:
+            raise DomainError("max retry delay must not be smaller than initial delay")
+
+    def delay_seconds(
+        self,
+        *,
+        attempts: int,
+        retry_after_seconds: float | None = None,
+    ) -> float:
+        if attempts < 1:
+            raise DomainError("retry delay requires at least one attempt")
+        exponential = self.initial_delay_seconds * float(2 ** min(attempts - 1, 16))
+        requested = retry_after_seconds or 0.0
+        return min(self.max_delay_seconds, max(exponential, requested))
 
 
 @dataclass(frozen=True, slots=True)

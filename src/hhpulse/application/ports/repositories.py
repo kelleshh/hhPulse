@@ -1,10 +1,27 @@
 from __future__ import annotations
 
-from datetime import date
-from typing import Protocol, Sequence
+from collections.abc import Sequence
+from dataclasses import dataclass
+from datetime import date, datetime
+from typing import Protocol
 
 from hhpulse.domain.entities import AnalysisJob, CrawlRun, CrawlUnit
+from hhpulse.domain.enums import RunStatus
 from hhpulse.domain.value_objects import SearchObservation
+
+
+@dataclass(frozen=True, slots=True)
+class CrawlProgress:
+    run_id: str
+    status: RunStatus
+    total_units: int
+    completed_units: int
+    pending_units: int
+    running_units: int
+    waiting_retry_units: int
+    failed_units: int
+    total_attempts: int
+    next_retry_at: datetime | None
 
 
 class AnalysisJobRepository(Protocol):
@@ -17,29 +34,69 @@ class AnalysisJobRepository(Protocol):
     async def update(self, job: AnalysisJob) -> None: ...
 
 
-class CrawlRunRepository(Protocol):
-    async def add(self, run: CrawlRun) -> None: ...
+class CrawlExecutionRepository(Protocol):
+    """Transactional persistence boundary for the complete CrawlRun aggregate."""
+
+    async def get_or_create(self, run: CrawlRun) -> CrawlRun: ...
 
     async def get(self, run_id: str) -> CrawlRun | None: ...
 
-    async def get_for_job_date(self, job_id: str, observation_date: date) -> CrawlRun | None: ...
+    async def get_for_job_date(
+        self,
+        job_id: str,
+        observation_date: date,
+    ) -> CrawlRun | None: ...
 
-    async def update(self, run: CrawlRun) -> None: ...
+    async def initialize(self, run: CrawlRun, units: Sequence[CrawlUnit]) -> CrawlRun: ...
 
+    async def recover_interrupted(self, run_id: str, *, at: datetime) -> int: ...
 
-class CrawlUnitRepository(Protocol):
-    async def add_many(self, units: Sequence[CrawlUnit]) -> None: ...
+    async def claim_next_ready(
+        self,
+        run_id: str,
+        *,
+        worker_id: str,
+        at: datetime,
+    ) -> CrawlUnit | None: ...
 
-    async def list_for_run(self, run_id: str) -> Sequence[CrawlUnit]: ...
+    async def defer_unit(
+        self,
+        unit_id: str,
+        *,
+        error: str,
+        retry_at: datetime,
+        at: datetime,
+    ) -> None: ...
 
-    async def list_incomplete_for_run(self, run_id: str) -> Sequence[CrawlUnit]: ...
+    async def complete_unit(
+        self,
+        unit_id: str,
+        observation: SearchObservation,
+        *,
+        at: datetime,
+    ) -> CrawlRun: ...
 
-    async def update(self, unit: CrawlUnit) -> None: ...
+    async def abort_parser(
+        self,
+        run_id: str,
+        *,
+        message: str,
+        at: datetime,
+    ) -> CrawlRun: ...
 
+    async def fail_run(
+        self,
+        run_id: str,
+        *,
+        code: str,
+        message: str,
+        at: datetime,
+    ) -> CrawlRun: ...
 
-class ObservationRepository(Protocol):
-    async def stage(self, run_id: str, unit_id: str, observation: SearchObservation) -> None: ...
+    async def expire_run(self, run_id: str, *, at: datetime) -> CrawlRun: ...
 
-    async def publish_run(self, run_id: str) -> None: ...
+    async def publish_completed(self, run_id: str, *, at: datetime) -> CrawlRun: ...
 
-    async def discard_staging(self, run_id: str) -> None: ...
+    async def progress(self, run_id: str) -> CrawlProgress: ...
+
+    async def list_units(self, run_id: str) -> Sequence[CrawlUnit]: ...

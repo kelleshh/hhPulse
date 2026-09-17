@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from hhpulse.api.routes import health, jobs
+from hhpulse.api.routes import health, jobs, runs
 from hhpulse.bootstrap import Container, build_container
 from hhpulse.config import Settings
 
@@ -17,14 +17,22 @@ def create_app(
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        app.state.container = container or await build_container(settings)
-        yield
+        resolved_container = container or await build_container(settings)
+        app.state.container = resolved_container
+        if resolved_container.scheduler is not None:
+            await resolved_container.scheduler.start()
+        try:
+            yield
+        finally:
+            if resolved_container.scheduler is not None:
+                await resolved_container.scheduler.stop()
 
     app = FastAPI(
         title="hhPulse",
-        version="0.1.0",
+        version="0.2.0",
         lifespan=lifespan,
     )
     app.include_router(health.router)
     app.include_router(jobs.router)
+    app.include_router(runs.router)
     return app
