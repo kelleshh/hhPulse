@@ -8,3 +8,7 @@ __pycache__/
 *.sqlite3
 *.db
 quarantine/
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+frontend/.env.local

@@ -6,8 +6,8 @@ build-backend = "poetry.core.masonry.api"
 name = "hhpulse"
 version = "0.2.0"
 description = "Local daily HH.ru labour-market analytics engine"
-authors = ["hhPulse"]
 readme = "README.md"
+authors = ["hhPulse"]
 packages = [{ include = "hhpulse", from = "src" }]
 
 [tool.poetry.dependencies]

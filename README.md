@@ -39,6 +39,8 @@
 - API ручного запуска/возобновления и чтения текущего прогресса:
   `POST/GET /api/v1/jobs/{job_id}/runs/today`.
 - Docker Compose для локального запуска и persistent volume.
+- Полный React/TypeScript frontend: обзор, лента качества данных, сравнение профессий,
+  дневной срез, задачи, persisted progress, события, настройки и CSV-выгрузка.
 - 43 автоматических теста на доменные инварианты, parser contract, полный role catalog,
   60-дневную методологию,
   rate/backoff, конкурентный claim, restart recovery, midnight expiry, persistence, staging,
@@ -51,7 +53,12 @@ src/hhpulse/
 ├── domain/          # сущности, value objects, инварианты, state transitions
 ├── application/     # use cases и порты
 ├── infrastructure/  # HH HTML adapter, transport, SQLite adapters
-└── api/             # HTTP boundary для будущего web UI
+└── api/             # HTTP boundary для web UI
+frontend/
+├── src/domain/      # frontend types and metric semantics
+├── src/data/        # demo/HTTP repository adapters and queries
+├── src/components/  # reusable controls, charts and job forms
+└── src/pages/       # complete application routes
 ```
 
 Зависимости направлены внутрь. `domain` не знает о FastAPI, SQLite, httpx и hh.ru HTML.
@@ -66,6 +73,10 @@ docker compose up --build
 ```
 
 API будет доступен на `http://localhost:8080`, OpenAPI — на `http://localhost:8080/docs`.
+Web UI будет доступен на `http://localhost:3000`. По умолчанию он собирается в полном
+демонстрационном режиме. Для подключения существующих jobs/progress endpoints установите
+`HHPULSE_FRONTEND_DATA_MODE=api` перед `docker compose up --build`; отсутствующие исторические
+read models при этом честно показываются как недоступные.
 
 Пример задачи "Москва, все роли":
 
@@ -86,14 +97,22 @@ curl -X POST http://localhost:8080/api/v1/jobs \
 ## Тесты
 
 ```bash
-python -m pip install -e '.[dev]'
-pytest
+poetry install
+poetry run pytest
+
+cd frontend
+npm ci
+npm run lint
+npm test
+npm run build
 ```
 
 ## Что намеренно не сделано в этой итерации
 
-Исполняемое ядро завершено, но пока нет Telegram/Prometheus/Grafana, WebSocket progress,
-аналитических read models, dashboard API и frontend. Текущий REST progress endpoint уже отдаёт
-persisted состояние; live push и визуализация относятся к следующей итерации.
+Исполняемое ядро и frontend завершены. Пока нет Telegram/Prometheus/Grafana, WebSocket progress,
+аналитических read models и dashboard API. Поэтому интерфейс имеет полноценный `demo`-адаптер,
+а режим реального API уже подключает существующие jobs/progress endpoints и fail-closed показывает
+отсутствующие аналитические маршруты. Требуемый backend-контракт описан в
+[`frontend/docs/api-contract.md`](frontend/docs/api-contract.md).
 
 Исполнение и аварийные гарантии описаны в [`docs/iteration-2.md`](docs/iteration-2.md).
