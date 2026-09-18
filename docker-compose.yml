@@ -1,29 +1,72 @@
+name: hhpulse
+
+x-runtime-security: &runtime-security
+  init: true
+  read_only: true
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
 services:
   api:
-    build: .
+    <<: *runtime-security
+    image: hhpulse-api:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PYTHON_IMAGE: ${HHPULSE_PYTHON_IMAGE:-python:3.12-slim-bookworm}
     restart: unless-stopped
     environment:
       HHPULSE_DB_PATH: /data/hhpulse.sqlite3
       HHPULSE_HOST: 0.0.0.0
       HHPULSE_PORT: 8080
+      HHPULSE_LOG_LEVEL: ${HHPULSE_LOG_LEVEL:-INFO}
       HHPULSE_QUARANTINE_DIR: /data/quarantine
-      HHPULSE_PREFLIGHT_SUCCESSES: 3
-    ports:
-      - "127.0.0.1:8080:8080"
+      HHPULSE_QUARANTINE_RETENTION_HOURS: ${HHPULSE_QUARANTINE_RETENTION_HOURS:-24}
+      HHPULSE_SOURCE_TIMEOUT_SECONDS: ${HHPULSE_SOURCE_TIMEOUT_SECONDS:-30}
+      HHPULSE_RETRY_INITIAL_SECONDS: ${HHPULSE_RETRY_INITIAL_SECONDS:-5}
+      HHPULSE_RETRY_MAX_SECONDS: ${HHPULSE_RETRY_MAX_SECONDS:-900}
+      HHPULSE_PREFLIGHT_SUCCESSES: ${HHPULSE_PREFLIGHT_SUCCESSES:-3}
+      HHPULSE_SCHEDULER_POLL_SECONDS: ${HHPULSE_SCHEDULER_POLL_SECONDS:-30}
+    expose:
+      - "8080"
     volumes:
       - hhpulse_data:/data
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    pids_limit: 256
+    stop_grace_period: 30s
 
   frontend:
+    <<: *runtime-security
+    image: hhpulse-frontend:local
     build:
       context: ./frontend
+      dockerfile: Dockerfile
       args:
+        NODE_IMAGE: ${HHPULSE_NODE_IMAGE:-node:24-alpine}
+        NGINX_IMAGE: ${HHPULSE_NGINX_IMAGE:-nginxinc/nginx-unprivileged:1.27-alpine}
         VITE_DATA_MODE: ${HHPULSE_FRONTEND_DATA_MODE:-demo}
         VITE_API_BASE_URL: ""
     restart: unless-stopped
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     ports:
-      - "127.0.0.1:3000:80"
+      - "127.0.0.1:${HHPULSE_WEB_PORT:-3000}:8080"
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+      - /var/cache/nginx:size=32m,mode=1777
+    pids_limit: 64
+    stop_grace_period: 10s
 
 volumes:
   hhpulse_data:
+    name: hhpulse_data

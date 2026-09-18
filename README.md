@@ -38,7 +38,7 @@
   - постоянно работающий daily scheduler внутри API-процесса.
 - API ручного запуска/возобновления и чтения текущего прогресса:
   `POST/GET /api/v1/jobs/{job_id}/runs/today`.
-- Docker Compose для локального запуска и persistent volume.
+- Однокнопочный Docker Compose deploy, многостадийные образы, healthchecks и persistent volume.
 - Полный React/TypeScript frontend: обзор, лента качества данных, сравнение профессий,
   дневной срез, задачи, persisted progress, события, настройки и CSV-выгрузка.
 - 43 автоматических теста на доменные инварианты, parser contract, полный role catalog,
@@ -69,19 +69,23 @@ frontend/
 ## Локальный запуск
 
 ```bash
-docker compose up --build
+./deploy.sh
 ```
 
-API будет доступен на `http://localhost:8080`, OpenAPI — на `http://localhost:8080/docs`.
-Web UI будет доступен на `http://localhost:3000`. По умолчанию он собирается в полном
-демонстрационном режиме. Для подключения существующих jobs/progress endpoints установите
-`HHPULSE_FRONTEND_DATA_MODE=api` перед `docker compose up --build`; отсутствующие исторические
-read models при этом честно показываются как недоступные.
+Скрипт проверит Docker, при первом запуске создаст `.env`, соберёт образы, поднимет сервисы,
+дождётся healthcheck и откроет браузер. Единственная внешняя точка входа —
+`http://localhost:3000`. API доступен через неё же: `/api`, `/docs`, `/openapi.json`, `/health`.
+
+По умолчанию frontend работает в полном демонстрационном режиме. Для подключения существующих
+jobs/progress endpoints измените `HHPULSE_FRONTEND_DATA_MODE=api` в `.env` и снова выполните
+`./deploy.sh`. Отсутствующие исторические read models при этом честно показываются как недоступные.
+
+Остальные команды и устройство сборки: [`docs/deployment.md`](docs/deployment.md).
 
 Пример задачи "Москва, все роли":
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/jobs \
+curl -X POST http://localhost:3000/api/v1/jobs \
   -H 'Content-Type: application/json' \
   -d '{
     "name": "Москва — все роли",
