@@ -19,6 +19,11 @@
 - Frontend переведён на multi-stage image: Node.js и `node_modules` остаются в
   build stage, статический `dist` обслуживает непривилегированный Nginx.
 - Для npm и pip включены BuildKit cache mounts.
+- BuildKit-кэши получили стабильные идентификаторы, а сетевые `RUN`-шаги по
+  умолчанию используют host network с IPv4-first для обхода проблем Docker DNS,
+  VPN и split tunneling.
+- Frontend image не устанавливает тестовые и lint-зависимости: в builder входят
+  только приложение, TypeScript и Vite.
 - Оба build context очищены `.dockerignore` от зависимостей, результатов сборки,
   тестов, локальных данных и служебных файлов.
 - Compose ждёт healthcheck API перед запуском frontend.
@@ -41,6 +46,7 @@ python -m pip wheel --no-deps .           PASS
 npm run lint                              PASS
 npm run test                              PASS (7 tests)
 npm run build                             PASS
+npm ci --omit=dev && npm run build        PASS (121 packages instead of 323)
 ```
 
 Полный `docker compose build/up` оставлен для ручного теста на целевой машине:

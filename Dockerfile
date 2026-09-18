@@ -11,7 +11,7 @@ WORKDIR /build
 COPY pyproject.toml README.md ./
 COPY src ./src
 
-RUN --mount=type=cache,target=/root/.cache/pip \
+RUN --mount=type=cache,id=hhpulse-pip-cache,target=/root/.cache/pip,sharing=locked \
     python -m pip wheel --wheel-dir /wheels .
 
 FROM ${PYTHON_IMAGE} AS runtime

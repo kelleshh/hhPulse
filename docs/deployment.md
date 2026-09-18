@@ -85,6 +85,25 @@ BuildKit-кэши сохраняют скачанные пакеты `pip` и np
 исходников не заставляет повторно скачивать зависимости, пока lock-файлы и
 метаданные проекта не изменились.
 
+По умолчанию команды `npm ci` и `pip wheel` во время сборки используют сеть
+хоста (`HHPULSE_BUILD_NETWORK=host`). На Linux это обходит отдельный Docker
+bridge и его DNS-маршрут, что особенно важно при VPN и split tunneling. Режим
+влияет только на `RUN` во время build и не меняет сеть запущенных контейнеров.
+Если конкретный Docker backend не поддерживает host network, укажите в `.env`:
+
+```dotenv
+HHPULSE_BUILD_NETWORK=default
+```
+
+Кэши имеют стабильные идентификаторы `hhpulse-npm-cache` и
+`hhpulse-pip-cache`, поэтому не теряются при изменениях Dockerfile. Для npm
+также принудительно выбран IPv4 первым, чтобы недоступный IPv6 не создавал
+повторяющиеся сетевые таймауты.
+
+Frontend builder устанавливает только зависимости приложения и инструменты
+production build (`npm ci --omit=dev`). ESLint, Vitest, jsdom и Testing Library
+остаются локальными dev dependencies и в Docker build не скачиваются.
+
 ## Безопасность runtime
 
 - оба процесса работают не от `root`;

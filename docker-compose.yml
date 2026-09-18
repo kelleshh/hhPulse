@@ -20,6 +20,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      network: ${HHPULSE_BUILD_NETWORK:-host}
       args:
         PYTHON_IMAGE: ${HHPULSE_PYTHON_IMAGE:-python:3.12-slim-bookworm}
     restart: unless-stopped
@@ -50,6 +51,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      network: ${HHPULSE_BUILD_NETWORK:-host}
       args:
         NODE_IMAGE: ${HHPULSE_NODE_IMAGE:-node:24-alpine}
         NGINX_IMAGE: ${HHPULSE_NGINX_IMAGE:-nginxinc/nginx-unprivileged:1.27-alpine}

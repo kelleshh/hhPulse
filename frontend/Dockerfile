@@ -5,10 +5,12 @@ ARG NGINX_IMAGE=nginxinc/nginx-unprivileged:1.27-alpine
 
 FROM ${NODE_IMAGE} AS build
 
+ENV NODE_OPTIONS=--dns-result-order=ipv4first
+
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm \
-    npm ci --prefer-offline --no-audit --no-fund
+RUN --mount=type=cache,id=hhpulse-npm-cache,target=/root/.npm,sharing=locked \
+    npm ci --omit=dev --prefer-offline --no-audit --no-fund
 
 COPY index.html tsconfig.json tsconfig.app.json tsconfig.node.json vite.config.ts ./
 COPY src ./src
