@@ -12,6 +12,7 @@ from hhpulse.application.ports.repositories import (
 )
 from hhpulse.application.ports.runtime import DailyCrawlExecutor, Sleeper
 from hhpulse.domain.entities import AnalysisJob
+from hhpulse.domain.enums import RunStatus
 
 LOGGER = logging.getLogger(__name__)
 
@@ -62,6 +63,10 @@ class DailyCrawlScheduler:
         job = await self._jobs.get(job_id)
         if job is None:
             raise KeyError(f"analysis job {job_id!r} does not exist")
+        observation_date = self._observation_date(job)
+        existing = await self._executions.get_for_job_date(job.id, observation_date)
+        if existing is not None and existing.status is RunStatus.PARSER_BROKEN:
+            await self._executions.reopen_parser_broken(existing.id, at=self._clock.now())
         return await self._launch_if_due(job)
 
     async def run_once(self) -> None:

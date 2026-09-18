@@ -106,3 +106,43 @@ def test_parser_fails_closed_when_clusters_disappear() -> None:
 def test_parser_rejects_non_search_page_by_semantic_contract() -> None:
     with pytest.raises(HhParserContractBroken, match="numeric HH search total"):
         HhSearchPageParser().parse("<html>DDoS-Guard js-challenge captcha</html>")
+
+
+def test_parser_accepts_explicit_zero_result_page() -> None:
+    state = {
+        "searchClusters": {
+            "experience": {
+                "groups": {
+                    "moreThan6": {
+                        "count": 0,
+                        "title": "Более 6 лет",
+                        "id": "moreThan6",
+                    }
+                }
+            }
+        }
+    }
+    encoded_state = html.escape(json.dumps(state, ensure_ascii=False), quote=True)
+    html_page = f"""
+    <html><body>
+      <h1 data-qa="title">По запросу ничего не найдено</h1>
+      <h2 data-qa="title">Ничего не нашлось</h2>
+      <template>{encoded_state}</template>
+    </body></html>
+    """
+
+    page = HhSearchPageParser().parse(html_page)
+
+    assert page.total_count == 0
+    assert page.facet("experience").get("moreThan6").count == 0  # type: ignore[union-attr]
+
+
+def test_parser_does_not_accept_zero_phrase_outside_a_result_heading() -> None:
+    html_page = """
+    <html><body>
+      <script>window.translations = {"empty": "Ничего не нашлось"}</script>
+    </body></html>
+    """
+
+    with pytest.raises(HhParserContractBroken, match="numeric HH search total"):
+        HhSearchPageParser().parse(html_page)

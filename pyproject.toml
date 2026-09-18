@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "hhpulse"
-version = "0.3.0"
+version = "0.3.1"
 description = "Local daily HH.ru labour-market analytics engine"
 readme = "README.md"
 authors = ["hhPulse"]

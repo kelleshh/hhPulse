@@ -15,6 +15,7 @@ const eventLabels: Record<string, string> = {
   run_failed: "Запуск остановлен с ошибкой",
   run_expired: "Временное окно запуска закончилось",
   run_published: "Дневной срез опубликован",
+  run_reopened: "Запуск продолжен после исправления парсера",
 };
 
 export function JobDetailPage() {

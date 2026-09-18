@@ -3,7 +3,13 @@ from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from hhpulse.domain.entities import AnalysisJob, AnalysisScope, CrawlRun, CrawlUnit
-from hhpulse.domain.enums import RoleSelectionMode, RunStatus, SearchTarget, UserAgentMode
+from hhpulse.domain.enums import (
+    RoleSelectionMode,
+    RunStatus,
+    RunUnitStatus,
+    SearchTarget,
+    UserAgentMode,
+)
 from hhpulse.domain.value_objects import (
     DailySchedule,
     FacetGroup,
@@ -69,6 +75,64 @@ async def test_completion_and_whole_run_publish_are_atomic(tmp_path) -> None:
         assert connection.execute("SELECT COUNT(*) FROM search_observations").fetchone()[0] == 1
         assert (
             connection.execute("SELECT COUNT(*) FROM staged_search_observations").fetchone()[0] == 0
+        )
+
+
+async def test_manual_parser_recovery_preserves_completed_checkpoint(tmp_path) -> None:
+    path = tmp_path / "hhpulse.sqlite3"
+    database = SqliteDatabase(path)
+    await database.initialize()
+    jobs = SqliteAnalysisJobRepository(database)
+    executions = SqliteCrawlExecutionRepository(database)
+    now = datetime(2026, 9, 18, 12, 0, tzinfo=ZoneInfo("Europe/Moscow"))
+    job = _job(now)
+    await jobs.add(job)
+    planned = await executions.get_or_create(
+        CrawlRun(id="run-recovery", job_id=job.id, observation_date=date(2026, 9, 18))
+    )
+    queries = tuple(
+        SearchQuery(
+            target=SearchTarget.VACANCY,
+            observation_date=planned.observation_date,
+            region_id="1",
+            professional_role_id=str(role_id),
+        )
+        for role_id in (84, 96)
+    )
+    await executions.initialize(
+        planned.start(total_units=2, at=now),
+        tuple(
+            CrawlUnit(id=f"unit-{index}", run_id=planned.id, query=query)
+            for index, query in enumerate(queries)
+        ),
+    )
+    claimed = await executions.claim_next_ready(
+        planned.id,
+        worker_id="worker-1",
+        at=now,
+    )
+    assert claimed is not None
+    await executions.complete_unit(
+        claimed.id,
+        SearchObservation(query=claimed.query, page=_page()),
+        at=now,
+    )
+    await executions.abort_parser(
+        planned.id,
+        message="zero result was not recognized",
+        at=now,
+    )
+
+    reopened = await executions.reopen_parser_broken(planned.id, at=now)
+    units = await executions.list_units(planned.id)
+
+    assert reopened.status is RunStatus.RUNNING
+    assert reopened.completed_units == 1
+    assert [unit.status for unit in units].count(RunUnitStatus.SUCCEEDED) == 1
+    assert [unit.status for unit in units].count(RunUnitStatus.PENDING) == 1
+    with sqlite3.connect(path) as connection:
+        assert (
+            connection.execute("SELECT COUNT(*) FROM staged_search_observations").fetchone()[0] == 1
         )
 
 

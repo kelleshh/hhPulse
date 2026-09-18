@@ -95,6 +95,8 @@ class CrawlExecutionRepository(Protocol):
         at: datetime,
     ) -> CrawlRun: ...
 
+    async def reopen_parser_broken(self, run_id: str, *, at: datetime) -> CrawlRun: ...
+
     async def fail_run(
         self,
         run_id: str,

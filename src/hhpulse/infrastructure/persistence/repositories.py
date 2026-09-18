@@ -394,6 +394,41 @@ class SqliteCrawlExecutionRepository(CrawlExecutionRepository):
 
         return await self._database.write(operation)
 
+    async def reopen_parser_broken(self, run_id: str, *, at: datetime) -> CrawlRun:
+        """Requeue only a manually retried parser-contract run.
+
+        Successful units and their staged observations stay intact. Units cancelled by
+        the fail-closed abort return to pending, so a fixed parser resumes from the exact
+        durable checkpoint instead of rebuilding the whole day.
+        """
+
+        def operation(connection: sqlite3.Connection) -> CrawlRun:
+            current = self._require_run(connection, run_id)
+            reopened = current.reopen_after_parser_fix()
+            failed_rows = connection.execute(
+                "SELECT * FROM crawl_units WHERE run_id = ? AND status = ?",
+                (run_id, RunUnitStatus.FAILED.value),
+            ).fetchall()
+            for row in failed_rows:
+                unit = self._unit_from_row(row).requeue_after_parser_fix(at=at)
+                self._update_unit(connection, unit)
+            self._update_run(connection, reopened)
+            self._append_event(
+                connection,
+                run_id=run_id,
+                unit_id=None,
+                at=at,
+                level="info",
+                event_type="run_reopened",
+                message=(
+                    "Ручное продолжение после исправления парсера: "
+                    f"возвращено в очередь {len(failed_rows)} запросов"
+                ),
+            )
+            return reopened
+
+        return await self._database.write(operation)
+
     async def fail_run(
         self,
         run_id: str,

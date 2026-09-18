@@ -38,7 +38,9 @@ RUNNING/WAITING_SOURCE -> PARSER_BROKEN | FAILED | EXPIRED
 `SUCCEEDED` запрещён, пока `completed_units != total_units`. В runtime этот переход выполняется
 в одной SQLite-транзакции с проверкой всех unit-ов, проверкой staging, переносом наблюдений и
 очисткой staging. Состояние `SUCCEEDED` без опубликованного snapshot невозможно.
-`PARSER_BROKEN`, `FAILED`, `EXPIRED` и `SUCCEEDED` — терминальные состояния.
+`FAILED`, `EXPIRED` и `SUCCEEDED` — окончательные состояния. `PARSER_BROKEN` останавливает
+автоматическое выполнение fail-closed, но допускает явное ручное продолжение после обновления
+парсера: завершённые units сохраняются, остальные возвращаются в очередь.
 
 ### CrawlUnit
 

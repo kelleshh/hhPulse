@@ -16,6 +16,14 @@ _TOTAL_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"Найден[оа]\s+([\d\s\u00a0\u202f]+)\s+резюм", re.IGNORECASE),
 )
 
+_ZERO_RESULT_TITLES = frozenset(
+    {
+        "по запросу ничего не найдено",
+        "по вашему запросу ничего не найдено",
+        "ничего не нашлось",
+    }
+)
+
 
 class HhSearchPageParser:
     """Parses only aggregate counts already embedded in HH search HTML.
@@ -43,6 +51,14 @@ class HhSearchPageParser:
             match = pattern.search(visible_text)
             if match is not None:
                 return self._parse_int(match.group(1))
+
+        # HH renders a semantic empty-result title instead of ``Найдено 0``.
+        # Restrict the check to visible heading nodes so translation dictionaries
+        # embedded in scripts/templates cannot turn an unrelated page into zero.
+        for heading in soup.select("h1[data-qa='title'], h2[data-qa='title']"):
+            normalized = " ".join(heading.get_text(" ", strip=True).lower().split())
+            if normalized in _ZERO_RESULT_TITLES:
+                return 0
 
         # Fallback: the actual result header can be present inside server state markup.
         for pattern in _TOTAL_PATTERNS:

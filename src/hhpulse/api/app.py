@@ -29,7 +29,7 @@ def create_app(
 
     app = FastAPI(
         title="hhPulse",
-        version="0.3.0",
+        version="0.3.1",
         lifespan=lifespan,
     )
     app.include_router(health.router)

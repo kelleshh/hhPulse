@@ -130,6 +130,18 @@ class CrawlRun:
             error_message=message,
         )
 
+    def reopen_after_parser_fix(self) -> CrawlRun:
+        if self.status is not RunStatus.PARSER_BROKEN:
+            raise InvalidStateTransition(f"cannot reopen parser run from {self.status}")
+        next_status = RunStatus.RUNNING if self.total_units > 0 else RunStatus.PLANNED
+        return replace(
+            self,
+            status=next_status,
+            finished_at=None,
+            error_code=None,
+            error_message=None,
+        )
+
     def fail(self, *, code: str, message: str, at: datetime) -> CrawlRun:
         terminal_statuses = {
             RunStatus.PARSER_BROKEN,
@@ -262,6 +274,18 @@ class CrawlUnit:
             status=RunUnitStatus.FAILED,
             updated_at=at,
             last_error=error,
+            retry_at=None,
+            worker_id=None,
+        )
+
+    def requeue_after_parser_fix(self, *, at: datetime) -> CrawlUnit:
+        if self.status is not RunUnitStatus.FAILED:
+            raise InvalidStateTransition(f"cannot requeue crawl unit from {self.status}")
+        return replace(
+            self,
+            status=RunUnitStatus.PENDING,
+            updated_at=at,
+            last_error=None,
             retry_at=None,
             worker_id=None,
         )
