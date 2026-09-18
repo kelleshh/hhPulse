@@ -179,8 +179,7 @@ class ParsedSearchPage:
         if role_facet is None:
             return ()
         return tuple(
-            ProfessionalRole(id=option.id, name=option.title)
-            for option in role_facet.options
+            ProfessionalRole(id=option.id, name=option.title) for option in role_facet.options
         )
 
 

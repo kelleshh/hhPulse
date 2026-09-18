@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from hhpulse.api.dependencies import get_container
-from hhpulse.api.schemas import ManualRunResponse, RunProgressResponse
+from hhpulse.api.schemas import ManualRunResponse, RunEventResponse, RunProgressResponse
 from hhpulse.bootstrap import Container
 
 router = APIRouter(prefix="/api/v1/jobs", tags=["runs"])
@@ -47,3 +47,32 @@ async def get_today_progress(
         error_code=run.error_code,
         error_message=run.error_message,
     )
+
+
+@router.get("/{job_id}/runs/today/events", response_model=list[RunEventResponse])
+async def get_today_events(
+    job_id: str,
+    container: ContainerDependency,
+    limit: int = 200,
+) -> list[RunEventResponse]:
+    job = await container.jobs.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="analysis job not found")
+    timezone = ZoneInfo(job.schedule.timezone)
+    observation_date = container.clock.now().astimezone(timezone).date()
+    run = await container.executions.get_for_job_date(job.id, observation_date)
+    if run is None:
+        return []
+    events = await container.executions.list_events(run.id, limit=limit)
+    return [
+        RunEventResponse(
+            id=event.id,
+            run_id=event.run_id,
+            unit_id=event.unit_id,
+            occurred_at=event.occurred_at,
+            level=event.level,
+            event_type=event.event_type,
+            message=event.message,
+        )
+        for event in events
+    ]

@@ -118,22 +118,10 @@ production build (`npm ci --omit=dev`). ESLint, Vitest, jsdom и Testing Library
 
 ## Режим frontend
 
-В `.env`:
-
-```dotenv
-HHPULSE_FRONTEND_DATA_MODE=demo
-```
-
-`demo` нужен для полного ручного тестирования готовой веб-морды без ещё не
-реализованных аналитических read models. `api` подключает реальные endpoints
-задач и текущего прогресса:
-
-```dotenv
-HHPULSE_FRONTEND_DATA_MODE=api
-```
-
-После изменения выполните `./deploy.sh`: build argument изменится и только
-frontend будет пересобран.
+Compose всегда собирает реальный API-режим. Старое значение
+`HHPULSE_FRONTEND_DATA_MODE=demo` в локальном `.env` намеренно игнорируется,
+поэтому обновление файлов не может случайно вернуть демонстрационные данные.
+Demo-режим остаётся только для локальной разработки и тестов frontend.
 
 ## Автозапуск после перезагрузки
 

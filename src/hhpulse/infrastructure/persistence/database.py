@@ -80,6 +80,24 @@ CREATE TABLE IF NOT EXISTS search_observations (
 
 CREATE INDEX IF NOT EXISTS idx_search_observations_run
     ON search_observations(run_id);
+
+CREATE TABLE IF NOT EXISTS crawl_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id TEXT NOT NULL REFERENCES crawl_runs(id) ON DELETE CASCADE,
+    unit_id TEXT,
+    occurred_at TEXT NOT NULL,
+    level TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    message TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_crawl_events_run_id
+    ON crawl_events(run_id, id DESC);
+
+CREATE TABLE IF NOT EXISTS resolved_alerts (
+    alert_id TEXT PRIMARY KEY,
+    resolved_at TEXT NOT NULL
+);
 """
 
 

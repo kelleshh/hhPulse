@@ -1,19 +1,32 @@
-import { ArrowLeft, CirclePlay, RotateCcw } from "lucide-react";
+import { ArrowLeft, CirclePlay, Radio, RotateCcw } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { Button } from "../components/ui/Button";
 import { EmptyState, ErrorState, PageLoading } from "../components/ui/Feedback";
 import { StatusBadge } from "../components/ui/StatusBadge";
-import { useJobs, useProgress, useTriggerToday } from "../data/queries";
+import { useJobs, useProgress, useRunEvents, useTriggerToday } from "../data/queries";
+
+const eventLabels: Record<string, string> = {
+  run_started: "План запуска создан",
+  workers_recovered: "Незавершённые обработчики восстановлены",
+  unit_started: "Запрос отправлен в обработку",
+  retry_scheduled: "Повтор запроса запланирован",
+  unit_completed: "Наблюдение сохранено",
+  parser_broken: "Контракт ответа изменился",
+  run_failed: "Запуск остановлен с ошибкой",
+  run_expired: "Временное окно запуска закончилось",
+  run_published: "Дневной срез опубликован",
+};
 
 export function JobDetailPage() {
   const { jobId = "" } = useParams();
   const jobs = useJobs();
   const progress = useProgress(jobId);
+  const events = useRunEvents(jobId);
   const trigger = useTriggerToday();
   const job = jobs.data?.find((item) => item.id === jobId);
 
   if (jobs.isLoading || progress.isLoading) return <PageLoading label="Загружаю состояние задачи" />;
-  if (jobs.error || progress.error) return <ErrorState error={jobs.error ?? progress.error} onRetry={() => { jobs.refetch(); progress.refetch(); }} />;
+  if (jobs.error || progress.error) return <ErrorState error={jobs.error ?? progress.error} onRetry={() => { void jobs.refetch(); void progress.refetch(); }} />;
   if (!job) return <EmptyState title="Задача не найдена" description="Вернитесь к списку и выберите существующую задачу." />;
 
   const run = progress.data;
@@ -43,12 +56,20 @@ export function JobDetailPage() {
             <div><span>Всего попыток</span><strong>{run.totalAttempts.toLocaleString("ru-RU")}</strong></div>
           </section>
           <section className="event-log">
-            <div className="section-heading"><h2>Последние события</h2><p>Журнал обновляется вместе с прогрессом.</p></div>
-            <ol>
-              <li><time>сейчас</time><span className="event-dot event-dot--active" /><div><strong>Обработка продолжается</strong><p>{run.runningUnits || 1} обработчика выполняют готовые запросы.</p></div></li>
-              {run.waitingRetryUnits > 0 ? <li><time>недавно</time><span className="event-dot event-dot--warning" /><div><strong>Часть запросов ждёт повторения</strong><p>Данные уже завершённых запросов сохранены.</p></div></li> : null}
-              <li><time>старт</time><span className="event-dot" /><div><strong>План создан и сохранён</strong><p>{run.totalUnits.toLocaleString("ru-RU")} единиц сбора готовы к выполнению.</p></div></li>
-            </ol>
+            <div className="section-heading section-heading--split"><div><h2>Живой журнал сбора</h2><p>Транзакционные события из SQLite, автоматическое обновление каждые 2 секунды.</p></div><span className="live-indicator"><Radio size={14} /> LIVE · {events.data?.length ?? 0}</span></div>
+            {events.error ? <ErrorState error={events.error} onRetry={() => events.refetch()} /> : null}
+            {!events.error && events.data?.length ? (
+              <ol className="event-log__stream">
+                {events.data.map((event) => (
+                  <li key={event.id} className={`event-log__${event.level}`}>
+                    <time dateTime={event.occurredAt}>{new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date(event.occurredAt))}</time>
+                    <span className={`event-dot event-dot--${event.level}`} />
+                    <div><strong>{eventLabels[event.eventType] ?? event.eventType}</strong><p>{event.message}</p></div>
+                    <code>{String(event.id).padStart(6, "0")}</code>
+                  </li>
+                ))}
+              </ol>
+            ) : !events.error ? <div className="event-log__empty">Журнал создан. Ожидаю первое событие обработчика…</div> : null}
           </section>
         </>
       )}

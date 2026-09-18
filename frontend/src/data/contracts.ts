@@ -7,6 +7,8 @@ import type {
   MetricKey,
   OverviewData,
   Role,
+  RoleMatrixData,
+  RunEvent,
   RunProgress,
   SnapshotData,
 } from "../domain/types";
@@ -27,10 +29,12 @@ export interface DataRepository {
   setJobEnabled(jobId: string, enabled: boolean): Promise<Job>;
   triggerToday(jobId: string): Promise<boolean>;
   getTodayProgress(jobId: string): Promise<RunProgress | null>;
+  listRunEvents(jobId: string): Promise<RunEvent[]>;
   listRoles(): Promise<Role[]>;
   getOverview(metric: MetricKey): Promise<OverviewData>;
   getComparison(request: ComparisonRequest): Promise<MarketSeries[]>;
   getSnapshot(date: string, roleId: string): Promise<SnapshotData>;
+  getRoleMatrix(dateTo?: string): Promise<RoleMatrixData>;
   listAlerts(): Promise<AlertItem[]>;
   resolveAlert(alertId: string): Promise<void>;
   getSettings(): Promise<AppSettings>;

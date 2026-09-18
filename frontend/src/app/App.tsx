@@ -9,6 +9,7 @@ const ComparePage = lazy(() => import("../pages/ComparePage").then((module) => (
 const DashboardPage = lazy(() => import("../pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
 const JobDetailPage = lazy(() => import("../pages/JobDetailPage").then((module) => ({ default: module.JobDetailPage })));
 const JobsPage = lazy(() => import("../pages/JobsPage").then((module) => ({ default: module.JobsPage })));
+const ProfessionConsolePage = lazy(() => import("../pages/ProfessionConsolePage").then((module) => ({ default: module.ProfessionConsolePage })));
 const SettingsPage = lazy(() => import("../pages/SettingsPage").then((module) => ({ default: module.SettingsPage })));
 const SnapshotPage = lazy(() => import("../pages/SnapshotPage").then((module) => ({ default: module.SnapshotPage })));
 
@@ -29,6 +30,7 @@ export function App() {
               <Route index element={<DashboardPage />} />
               <Route path="compare" element={<ComparePage />} />
               <Route path="snapshot" element={<SnapshotPage />} />
+              <Route path="console" element={<ProfessionConsolePage />} />
               <Route path="jobs" element={<JobsPage />} />
               <Route path="jobs/:jobId" element={<JobDetailPage />} />
               <Route path="alerts" element={<AlertsPage />} />

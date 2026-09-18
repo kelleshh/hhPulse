@@ -6,8 +6,8 @@ import { SegmentedControl } from "../components/ui/SegmentedControl";
 import { Toggle } from "../components/ui/Toggle";
 import { useSaveSettings, useSettings } from "../data/queries";
 import { dataMode } from "../data/repository";
-import { METRICS, VIEW_MODES } from "../domain/metrics";
-import type { AppSettings, MetricKey } from "../domain/types";
+import { CHART_GEOMETRIES, METRICS, VIEW_MODES } from "../domain/metrics";
+import type { AppSettings, ChartGeometry, MetricKey } from "../domain/types";
 
 export function SettingsPage() {
   const settings = useSettings();
@@ -34,6 +34,7 @@ export function SettingsPage() {
           <div className="section-heading"><h2>Аналитика по умолчанию</h2><p>Используется при первом открытии обзора и сравнения.</p></div>
           <label className="field"><span>Показатель</span><select value={form.defaultMetric} onChange={(event) => setForm({ ...form, defaultMetric: event.target.value as MetricKey })}>{Object.values(METRICS).map((metric) => <option key={metric.key} value={metric.key}>{metric.label}</option>)}</select></label>
           <div className="field"><span>Режим шкалы</span><SegmentedControl label="Режим шкалы" value={form.defaultViewMode} options={VIEW_MODES} onChange={(defaultViewMode) => setForm({ ...form, defaultViewMode })} /></div>
+          <label className="field"><span>Геометрия графика</span><select value={form.defaultChartGeometry} onChange={(event) => setForm({ ...form, defaultChartGeometry: event.target.value as ChartGeometry })}>{CHART_GEOMETRIES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
         </section>
         <section>
           <div className="section-heading"><h2>Отображение</h2><p>Настройки хранятся только в этом браузере.</p></div>

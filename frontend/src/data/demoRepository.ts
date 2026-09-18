@@ -9,7 +9,9 @@ import {
   makeSeries,
   makeExperienceSeries,
   makeSnapshot,
+  makeRoleMatrix,
   observationDays,
+  DEMO_RUN_EVENTS,
 } from "./demoData";
 
 const JOBS_KEY = "hhpulse.demo.jobs";
@@ -72,6 +74,11 @@ export class DemoRepository implements DataRepository {
     return jobId === "moscow-market" ? structuredClone(DEMO_PROGRESS) : null;
   }
 
+  async listRunEvents(jobId: string) {
+    await pause();
+    return jobId === "moscow-market" ? structuredClone(DEMO_RUN_EVENTS) : [];
+  }
+
   async listRoles() {
     await pause();
     return structuredClone(DEMO_ROLES);
@@ -105,6 +112,11 @@ export class DemoRepository implements DataRepository {
   async getSnapshot(date: string, roleId: string) {
     await pause();
     return makeSnapshot(date, roleId);
+  }
+
+  async getRoleMatrix() {
+    await pause();
+    return makeRoleMatrix();
   }
 
   async listAlerts() {

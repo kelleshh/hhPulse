@@ -1,4 +1,4 @@
-import type { MetricDefinition, MetricKey, ViewMode } from "./types";
+import type { ChartGeometry, MetricDefinition, MetricKey, ViewMode } from "./types";
 
 export const METRICS: Record<MetricKey, MetricDefinition> = {
   hhIndex: {
@@ -36,12 +36,49 @@ export const METRICS: Record<MetricKey, MetricDefinition> = {
     unit: "percent",
     description: "Доля вакансий с видимой зарплатной вилкой",
   },
+  remoteShare: {
+    key: "remoteShare",
+    label: "Доля удалённой работы",
+    shortLabel: "Удалённо",
+    unit: "percent",
+    description: "Доля вакансий с удалённым форматом работы",
+  },
+  hybridShare: {
+    key: "hybridShare",
+    label: "Доля гибридной работы",
+    shortLabel: "Гибрид",
+    unit: "percent",
+    description: "Доля вакансий с гибридным форматом работы",
+  },
+  higherEducationShare: {
+    key: "higherEducationShare",
+    label: "Требование высшего образования",
+    shortLabel: "Высшее образование",
+    unit: "percent",
+    description: "Доля вакансий в фасете высшего образования",
+  },
+  noExperienceShare: {
+    key: "noExperienceShare",
+    label: "Вакансии без опыта",
+    shortLabel: "Без опыта",
+    unit: "percent",
+    description: "Доля вакансий, доступных кандидатам без опыта",
+  },
 };
 
 export const VIEW_MODES: { value: ViewMode; label: string }[] = [
   { value: "absolute", label: "Значения" },
   { value: "index", label: "Индекс 100" },
   { value: "change", label: "Изменение, %" },
+];
+
+export const CHART_GEOMETRIES: { value: ChartGeometry; label: string }[] = [
+  { value: "line", label: "Линии" },
+  { value: "line-points", label: "Линии + точки" },
+  { value: "step", label: "Ступени" },
+  { value: "area", label: "Области" },
+  { value: "bars", label: "Столбцы" },
+  { value: "scatter", label: "Точки" },
 ];
 
 export function formatMetric(value: number | null, metric: MetricKey, mode: ViewMode): string {

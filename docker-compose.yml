@@ -55,7 +55,7 @@ services:
       args:
         NODE_IMAGE: ${HHPULSE_NODE_IMAGE:-node:24-alpine}
         NGINX_IMAGE: ${HHPULSE_NGINX_IMAGE:-nginxinc/nginx-unprivileged:1.27-alpine}
-        VITE_DATA_MODE: ${HHPULSE_FRONTEND_DATA_MODE:-demo}
+        VITE_DATA_MODE: api
         VITE_API_BASE_URL: ""
     restart: unless-stopped
     depends_on:

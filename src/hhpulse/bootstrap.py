@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import timedelta
 
+from hhpulse.application.ports.analytics import AnalyticsReadRepository
+from hhpulse.application.ports.catalog import ProfessionalRoleCatalog
 from hhpulse.application.ports.clock import Clock
 from hhpulse.application.ports.repositories import (
     AnalysisJobRepository,
@@ -13,7 +15,9 @@ from hhpulse.application.use_cases.execution import ExecuteDailyCrawl
 from hhpulse.config import Settings
 from hhpulse.domain.value_objects import RetryPolicy
 from hhpulse.infrastructure.clock import SystemClock
+from hhpulse.infrastructure.hh.catalog import HhProfessionalRoleCatalog
 from hhpulse.infrastructure.hh.factory import HhMarketSourceFactory
+from hhpulse.infrastructure.persistence.analytics import SqliteAnalyticsReadRepository
 from hhpulse.infrastructure.persistence.database import SqliteDatabase
 from hhpulse.infrastructure.persistence.repositories import (
     SqliteAnalysisJobRepository,
@@ -29,6 +33,8 @@ class Container:
     jobs: AnalysisJobRepository
     executions: CrawlExecutionRepository
     scheduler: DailyCrawlScheduler | None = None
+    analytics: AnalyticsReadRepository | None = None
+    role_catalog: ProfessionalRoleCatalog | None = None
 
 
 async def build_container(settings: Settings | None = None) -> Container:
@@ -39,6 +45,7 @@ async def build_container(settings: Settings | None = None) -> Container:
     sleeper = AsyncioSleeper()
     jobs = SqliteAnalysisJobRepository(database)
     executions = SqliteCrawlExecutionRepository(database)
+    analytics = SqliteAnalyticsReadRepository(database)
     quarantine = FileHtmlQuarantine(
         resolved.quarantine_dir,
         retention=timedelta(hours=resolved.quarantine_retention_hours),
@@ -70,4 +77,8 @@ async def build_container(settings: Settings | None = None) -> Container:
         jobs=jobs,
         executions=executions,
         scheduler=scheduler,
+        analytics=analytics,
+        role_catalog=HhProfessionalRoleCatalog(
+            timeout_seconds=resolved.source_timeout_seconds,
+        ),
     )

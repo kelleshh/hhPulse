@@ -4,6 +4,7 @@ import {
   Database,
   GitCompareArrows,
   LayoutDashboard,
+  PanelsTopLeft,
   Settings,
   SlidersHorizontal,
 } from "lucide-react";
@@ -15,6 +16,7 @@ const navigation = [
   { to: "/", label: "Обзор", icon: LayoutDashboard, end: true },
   { to: "/compare", label: "Сравнение", icon: GitCompareArrows },
   { to: "/snapshot", label: "Срез рынка", icon: ChartNoAxesCombined },
+  { to: "/console", label: "Пульт профессий", icon: PanelsTopLeft },
   { to: "/jobs", label: "Сбор данных", icon: Database },
   { to: "/alerts", label: "События", icon: Bell },
   { to: "/settings", label: "Настройки", icon: Settings },
@@ -53,8 +55,8 @@ export function AppShell() {
           <div className="topbar__source-state">
             <span className="source-light" aria-hidden="true" />
             <span>
-              <strong>{dataMode === "demo" ? "Демонстрационный режим" : "Локальный API подключён"}</strong>
-              <small>{dataMode === "demo" ? "запросы к HH не выполняются" : "состояние HH видно в текущем запуске"}</small>
+              <strong>{dataMode === "demo" ? "Демонстрационный режим" : "Режим реальных данных"}</strong>
+              <small>{dataMode === "demo" ? "запросы к HH не выполняются" : "SQLite · HH API · журнал сбора"}</small>
             </span>
           </div>
           <time dateTime={new Date().toISOString()}>

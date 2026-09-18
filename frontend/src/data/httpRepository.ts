@@ -8,6 +8,8 @@ import type {
   MetricKey,
   OverviewData,
   Role,
+  RoleMatrixData,
+  RunEvent,
   RunProgress,
   SnapshotData,
 } from "../domain/types";
@@ -46,6 +48,16 @@ const progressSchema = z.object({
   next_retry_at: z.string().nullable(),
   error_code: z.string().nullable(),
   error_message: z.string().nullable(),
+});
+
+const runEventSchema = z.object({
+  id: z.number(),
+  run_id: z.string(),
+  unit_id: z.string().nullable(),
+  occurred_at: z.string(),
+  level: z.enum(["info", "success", "warning", "error"]),
+  event_type: z.string(),
+  message: z.string(),
 });
 
 function mapJob(value: z.infer<typeof jobSchema>): Job {
@@ -112,6 +124,7 @@ export class HttpRepository implements DataRepository {
       const detail = await response.json().catch(() => null) as { detail?: string } | null;
       throw new DataSourceError(detail?.detail ?? `HTTP ${response.status}`, response.status);
     }
+    if (response.status === 204) return undefined as T;
     return response.json() as Promise<T>;
   }
 
@@ -151,6 +164,19 @@ export class HttpRepository implements DataRepository {
     }
   }
 
+  async listRunEvents(jobId: string): Promise<RunEvent[]> {
+    const data = await this.request<unknown>(`/api/v1/jobs/${jobId}/runs/today/events?limit=250`);
+    return z.array(runEventSchema).parse(data).map((event) => ({
+      id: event.id,
+      runId: event.run_id,
+      unitId: event.unit_id,
+      occurredAt: event.occurred_at,
+      level: event.level,
+      eventType: event.event_type,
+      message: event.message,
+    }));
+  }
+
   listRoles(): Promise<Role[]> {
     return this.request<Role[]>("/api/v1/catalog/professional-roles");
   }
@@ -175,6 +201,12 @@ export class HttpRepository implements DataRepository {
   getSnapshot(date: string, roleId: string): Promise<SnapshotData> {
     const params = new URLSearchParams({ date, role_id: roleId });
     return this.request<SnapshotData>(`/api/v1/analytics/snapshot?${params}`);
+  }
+
+  getRoleMatrix(dateTo?: string): Promise<RoleMatrixData> {
+    const params = new URLSearchParams({ history_days: "90" });
+    if (dateTo) params.set("date_to", dateTo);
+    return this.request<RoleMatrixData>(`/api/v1/analytics/role-matrix?${params}`);
   }
 
   listAlerts(): Promise<AlertItem[]> {

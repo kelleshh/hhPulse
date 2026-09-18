@@ -11,12 +11,17 @@ export type UnitStatus = "pending" | "running" | "waiting_retry" | "failed" | "s
 export type UserAgentMode = "shared" | "per_worker";
 export type RoleSelectionMode = "all" | "selected";
 export type ViewMode = "absolute" | "index" | "change";
+export type ChartGeometry = "line" | "line-points" | "step" | "area" | "bars" | "scatter";
 export type MetricKey =
   | "hhIndex"
   | "vacancies"
   | "resumes"
   | "lowResponseShare"
-  | "salaryVisibleShare";
+  | "salaryVisibleShare"
+  | "remoteShare"
+  | "hybridShare"
+  | "higherEducationShare"
+  | "noExperienceShare";
 
 export interface Job {
   id: string;
@@ -51,6 +56,7 @@ export interface CreateJobInput {
 
 export interface RunProgress {
   runId: string;
+  jobId?: string;
   status: RunStatus;
   totalUnits: number;
   completedUnits: number;
@@ -67,6 +73,16 @@ export interface RunProgress {
   currentRole?: string;
   currentFilter?: string;
   startedAt?: string;
+}
+
+export interface RunEvent {
+  id: number;
+  runId: string;
+  unitId: string | null;
+  occurredAt: string;
+  level: "info" | "success" | "warning" | "error";
+  eventType: string;
+  message: string;
 }
 
 export interface Role {
@@ -130,12 +146,56 @@ export interface SnapshotData {
   hhIndex: number;
   lowResponseShare: number;
   salaryVisibleShare: number;
+  remoteShare: number | null;
+  hybridShare: number | null;
+  higherEducationShare: number | null;
+  noExperienceShare: number | null;
   distributions: {
     experience: DistributionItem[];
     workFormat: DistributionItem[];
     schedule: DistributionItem[];
     employment: DistributionItem[];
+    education: DistributionItem[];
+    labels: DistributionItem[];
   };
+  facets: Record<string, DistributionItem[]>;
+}
+
+export interface RoleHistoryPoint {
+  date: string;
+  hhIndex: number | null;
+  vacancies: number;
+  resumes: number;
+  lowResponseShare: number | null;
+  salaryVisibleShare: number | null;
+  remoteShare: number | null;
+  hybridShare: number | null;
+  higherEducationShare: number | null;
+  noExperienceShare: number | null;
+}
+
+export interface RoleMatrixRow extends Omit<RoleHistoryPoint, "date"> {
+  roleId: string;
+  roleName: string;
+  history: RoleHistoryPoint[];
+}
+
+export interface MetricStatistics {
+  count: number;
+  min: number | null;
+  q1: number | null;
+  median: number | null;
+  q3: number | null;
+  max: number | null;
+  mean: number | null;
+  stddev: number | null;
+}
+
+export interface RoleMatrixData {
+  date: string | null;
+  availableDates: string[];
+  rows: RoleMatrixRow[];
+  statistics: Partial<Record<MetricKey, MetricStatistics>>;
 }
 
 export type AlertSeverity = "critical" | "warning" | "info";
@@ -153,6 +213,7 @@ export interface AlertItem {
 export interface AppSettings {
   defaultMetric: MetricKey;
   defaultViewMode: ViewMode;
+  defaultChartGeometry: ChartGeometry;
   compactTables: boolean;
   reducedDataAnimation: boolean;
 }

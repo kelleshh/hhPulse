@@ -414,3 +414,147 @@ p { line-height: 1.55; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* Engineering-console theme: warm paper, hard edges and ordered RGB signals. */
+:root {
+  --archive: rgb(224, 220, 199);
+  --paper: rgb(244, 241, 220);
+  --ink: rgb(35, 36, 31);
+  --muted: rgb(88, 87, 76);
+  --faint: rgb(125, 122, 106);
+  --line: rgb(195, 190, 166);
+  --line-strong: rgb(117, 114, 97);
+  --signal: rgb(31, 103, 123);
+  --signal-dark: rgb(23, 72, 91);
+  --ice: rgb(211, 225, 220);
+  --green: rgb(47, 119, 91);
+  --green-soft: rgb(209, 226, 207);
+  --red: rgb(164, 65, 49);
+  --red-soft: rgb(237, 211, 199);
+  --amber: rgb(178, 113, 39);
+  --amber-soft: rgb(238, 221, 181);
+}
+
+body {
+  color: var(--ink);
+  background-color: var(--archive);
+  background-image: linear-gradient(rgba(63, 62, 52, .035) 1px, transparent 1px), linear-gradient(90deg, rgba(63, 62, 52, .035) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+h1, h2, h3 { letter-spacing: -.012em; }
+h1 { font-weight: 700; }
+.sidebar { color: rgb(231, 229, 211); background: rgb(40, 43, 38); border-right: 3px solid rgb(113, 111, 94); }
+.brand { border-bottom: 1px solid rgb(85, 87, 77); }
+.brand__mark, .button, .icon-button, .field input, .field select, .role-picker > input, .analysis-panel, .market-tape, .filter-panel, .distribution, .jobs-list, .run-detail, .event-log, .settings-form > section, .feedback, .dialog { border-radius: 2px; }
+.brand__mark i { border-radius: 0; background: rgb(73, 145, 147); }
+.brand__mark i:nth-child(2) { background: rgb(211, 155, 69); }
+.primary-nav a { border-radius: 1px; }
+.primary-nav a.active { background: rgb(71, 74, 64); box-shadow: inset 4px 0 0 rgb(218, 151, 57); }
+.topbar { background: rgba(235, 232, 211, .94); border-bottom: 3px double var(--line-strong); backdrop-filter: none; }
+.source-light { background: rgb(57, 145, 100); border-color: rgb(174, 208, 177); box-shadow: none; }
+.page-container { width: min(1760px, 100%); }
+.page-heading h1::after { display: inline-block; width: 22px; height: 5px; margin-left: 12px; content: ""; background: rgb(209, 136, 48); vertical-align: middle; }
+.button { box-shadow: 2px 2px 0 rgba(45, 45, 37, .16); }
+.button--primary { background: rgb(29, 100, 120); }
+.segmented-control { background: rgb(205, 201, 181); border: 1px solid rgb(151, 147, 128); border-radius: 2px; }
+.segmented-control span, .segmented-control label.is-active span { border-radius: 0; }
+.segmented-control label.is-active span { background: rgb(245, 242, 222); box-shadow: inset 0 -3px 0 rgb(208, 137, 49); }
+.analysis-panel, .market-tape, .distribution, .jobs-list, .run-detail, .event-log, .settings-form > section, .feedback { background: var(--paper); box-shadow: 3px 3px 0 rgba(61, 60, 49, .10); }
+.data-table th:first-child, .data-table td:first-child { background: var(--paper); }
+.data-table thead th, .data-table thead th:first-child { background: rgb(218, 214, 193); }
+.snapshot-measures { grid-template-columns: repeat(5, 1fr); background: var(--paper); border-radius: 2px; }
+.snapshot-measures--extended { grid-template-columns: repeat(5, 1fr); }
+.snapshot-measures--extended > div:nth-child(5n) { border-right: 0; }
+.snapshot-measures--extended > div:nth-child(n+6) { border-top: 1px solid var(--line); }
+.snapshot-measures__focus { background: rgb(30, 98, 119); }
+.distribution__track { background: rgb(214, 210, 190); }
+.distribution__track span { background: rgb(39, 116, 131); }
+.section-heading--split { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+
+.live-indicator { display: inline-flex; align-items: center; gap: 6px; padding: 5px 8px; color: rgb(45, 111, 78); background: rgb(211, 226, 207); border: 1px solid rgb(125, 158, 122); font: 700 .67rem/1 ui-monospace, "SFMono-Regular", Consolas, monospace; letter-spacing: .08em; }
+.event-log__stream { overflow: auto; max-height: 520px; padding: 0 4px 0 0 !important; font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; }
+.event-log__stream li { grid-template-columns: 70px 14px minmax(0, 1fr) 52px; min-height: 58px; }
+.event-log__stream code { color: var(--faint); font-size: .68rem; text-align: right; }
+.event-dot--success { background: var(--green); box-shadow: 0 0 0 1px var(--green); }
+.event-dot--info { background: var(--signal); box-shadow: 0 0 0 1px var(--signal); }
+.event-dot--error { background: var(--red); box-shadow: 0 0 0 1px var(--red); }
+.event-dot--warning { background: var(--amber); box-shadow: 0 0 0 1px var(--amber); }
+.event-log__empty { margin-top: 18px; padding: 22px; color: var(--muted); background: rgb(229, 225, 205); border: 1px dashed var(--line-strong); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: .78rem; }
+
+.console-page { gap: 18px; }
+.console-kicker { display: block; margin-bottom: 7px; color: rgb(121, 87, 35); font: 700 .67rem/1.3 ui-monospace, "SFMono-Regular", Consolas, monospace; letter-spacing: .1em; }
+.console-heading__stamp { display: flex; min-width: 190px; align-items: center; gap: 10px; padding: 10px 12px; background: rgb(46, 49, 43); border: 1px solid rgb(25, 27, 23); box-shadow: 3px 3px 0 rgba(31, 31, 26, .2); color: rgb(229, 225, 205); }
+.console-heading__stamp span { display: flex; flex-direction: column; color: rgb(176, 176, 158); font: .62rem/1.3 ui-monospace, "SFMono-Regular", Consolas, monospace; text-transform: uppercase; }
+.console-heading__stamp strong { color: rgb(224, 158, 67); font-size: .78rem; }
+.console-toolbar { display: grid; grid-template-columns: minmax(210px, 1.2fr) 190px minmax(210px, 1fr) 190px; gap: 10px; padding: 13px; background: rgb(211, 207, 187); border: 1px solid var(--line-strong); box-shadow: inset 0 0 0 3px rgb(225, 221, 202); }
+.console-toolbar .field { gap: 4px; }
+.console-toolbar .field > span { color: rgb(71, 70, 60); font: 700 .61rem/1.2 ui-monospace, "SFMono-Regular", Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; }
+.statistics-strip { display: grid; grid-template-columns: repeat(8, 1fr); background: rgb(48, 51, 45); border: 1px solid rgb(26, 28, 24); color: rgb(230, 227, 207); box-shadow: 3px 3px 0 rgba(35, 35, 29, .18); }
+.statistics-strip div { min-width: 0; padding: 10px 11px; border-right: 1px solid rgb(90, 92, 80); }
+.statistics-strip div:last-child { border-right: 0; }
+.statistics-strip span { display: block; margin-bottom: 5px; color: rgb(167, 168, 149); font: 700 .58rem/1 ui-monospace, "SFMono-Regular", Consolas, monospace; letter-spacing: .12em; }
+.statistics-strip strong { overflow: hidden; display: block; color: rgb(226, 158, 63); font: 700 .92rem/1.1 ui-monospace, "SFMono-Regular", Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.console-chart-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.console-panel { min-width: 0; padding: 15px; background: var(--paper); border: 1px solid var(--line-strong); box-shadow: 3px 3px 0 rgba(59, 58, 48, .12); }
+.console-panel--wide { grid-column: 1; }
+.console-panel--correlation { grid-column: 2; }
+.console-panel__heading { display: flex; align-items: flex-start; gap: 10px; min-height: 61px; padding-bottom: 10px; border-bottom: 3px double var(--line); }
+.console-panel__icon { display: grid; width: 30px; height: 30px; flex: 0 0 auto; place-items: center; color: rgb(233, 228, 202); background: rgb(46, 49, 43); }
+.console-panel__heading small { color: rgb(148, 91, 32); font: 700 .56rem/1 ui-monospace, "SFMono-Regular", Consolas, monospace; letter-spacing: .12em; }
+.console-panel__heading h2 { margin: 3px 0 1px; font-size: 1rem; }
+.console-panel__heading p { margin: 0; color: var(--muted); font-size: .68rem; }
+.console-chart { height: 245px; margin-top: 8px; }
+.console-chart--large { height: 330px; }
+.console-tooltip { display: flex; flex-direction: column; gap: 3px; max-width: 260px; padding: 9px; color: rgb(43, 43, 36); background: rgb(245, 241, 216); border: 1px solid rgb(78, 77, 66); box-shadow: 3px 3px 0 rgba(38, 38, 31, .16); font: .68rem/1.3 ui-monospace, "SFMono-Regular", Consolas, monospace; }
+.console-tooltip strong { margin-bottom: 3px; }
+.correlation-table { overflow: auto; height: 330px; margin-top: 8px; }
+.correlation-table table { width: 100%; height: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 2px; font-size: .63rem; }
+.correlation-table th { overflow: hidden; padding: 4px; color: var(--muted); font-weight: 650; text-align: center; text-overflow: ellipsis; }
+.correlation-table thead th { height: 60px; writing-mode: vertical-rl; transform: rotate(180deg); }
+.correlation-table thead th:first-child { writing-mode: initial; transform: none; }
+.correlation-table tbody th { width: 95px; text-align: right; }
+.correlation-table td { min-width: 42px; text-align: center; border: 1px solid rgba(46, 46, 38, .15); }
+.role-bank { padding-top: 8px; }
+.role-bank__counter { padding: 6px 8px; color: rgb(65, 65, 56); background: rgb(216, 211, 189); border: 1px solid var(--line-strong); font: 700 .62rem/1 ui-monospace, "SFMono-Regular", Consolas, monospace; letter-spacing: .08em; }
+.role-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; margin-top: 14px; }
+.role-card { min-width: 0; padding: 10px; background: rgb(239, 235, 212); border: 1px solid rgb(143, 139, 119); border-top: 5px solid; box-shadow: 2px 2px 0 rgba(47, 47, 39, .12); }
+.role-card__head, .role-card__foot { display: flex; align-items: center; justify-content: space-between; color: rgb(105, 103, 89); font: .57rem/1 ui-monospace, "SFMono-Regular", Consolas, monospace; letter-spacing: .05em; }
+.role-card h3 { overflow: hidden; height: 31px; margin: 8px 0 7px; font-size: .75rem; line-height: 1.25; }
+.role-card__reading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.role-card__reading strong { font: 700 1.35rem/1 ui-monospace, "SFMono-Regular", Consolas, monospace; }
+.role-card__reading small { overflow: hidden; color: var(--muted); font-size: .58rem; text-overflow: ellipsis; white-space: nowrap; }
+.sparkline { display: block; width: 100%; height: 34px; margin: 7px 0; background: rgba(196, 191, 168, .28); }
+.sparkline line { stroke: rgb(180, 176, 155); stroke-width: 1; }
+.sparkline polyline { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; }
+.role-card__foot { justify-content: flex-start; gap: 10px; padding-top: 7px; border-top: 1px solid rgb(193, 188, 164); }
+.role-card__foot b { color: rgb(50, 50, 43); }
+.data-vacuum { display: flex; min-height: 280px; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: var(--muted); background: rgb(229, 225, 205); border: 1px dashed var(--line-strong); text-align: center; }
+.data-vacuum strong { color: var(--ink); }
+
+@media (max-width: 1180px) {
+  .console-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .statistics-strip { grid-template-columns: repeat(4, 1fr); }
+  .statistics-strip div:nth-child(4n) { border-right: 0; }
+  .statistics-strip div:nth-child(n+5) { border-top: 1px solid rgb(90, 92, 80); }
+}
+
+@media (max-width: 820px) {
+  .primary-nav { grid-template-columns: repeat(7, 1fr); }
+  .sidebar { background: rgb(239, 235, 214); }
+  .console-chart-grid { grid-template-columns: 1fr; }
+  .console-panel--wide, .console-panel--correlation { grid-column: 1; }
+  .snapshot-measures--extended { grid-template-columns: repeat(9, 170px); }
+  .section-heading--split { flex-direction: column; }
+  .event-log__stream li { grid-template-columns: 62px 12px 1fr; }
+  .event-log__stream code { display: none; }
+}
+
+@media (max-width: 580px) {
+  .console-toolbar { grid-template-columns: 1fr; }
+  .statistics-strip { grid-template-columns: repeat(2, 1fr); }
+  .statistics-strip div:nth-child(2n) { border-right: 0; }
+  .statistics-strip div:nth-child(n+3) { border-top: 1px solid rgb(90, 92, 80); }
+  .role-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .console-heading__stamp { align-self: stretch; }
+}

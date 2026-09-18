@@ -161,8 +161,7 @@ async def test_daily_executor_runs_preflight_and_atomically_publishes_all_units(
     with sqlite3.connect(db_path) as connection:
         assert connection.execute("SELECT COUNT(*) FROM search_observations").fetchone()[0] == 10
         assert (
-            connection.execute("SELECT COUNT(*) FROM staged_search_observations").fetchone()[0]
-            == 0
+            connection.execute("SELECT COUNT(*) FROM staged_search_observations").fetchone()[0] == 0
         )
 
 
@@ -171,9 +170,7 @@ async def test_429_persists_retry_and_resumes_without_repeating_successful_units
     repository, jobs, _ = await _repositories(tmp_path)
     job = _job(clock.now(), max_concurrency=1, include_experience=False)
     await jobs.add(job)
-    source = FakeSource(
-        outcomes=[MarketSourceThrottled("HTTP 429", retry_after_seconds=7.0)]
-    )
+    source = FakeSource(outcomes=[MarketSourceThrottled("HTTP 429", retry_after_seconds=7.0)])
     sleeper = AdvancingSleeper(clock)
 
     run = await _executor(repository, source, clock, sleeper=sleeper).execute(job, clock.today())
@@ -429,9 +426,7 @@ def _page() -> ParsedSearchPage:
         facets=(
             FacetGroup(
                 key="experience",
-                options=(
-                    FacetOptionCount(id="noExperience", title="Нет опыта", count=25),
-                ),
+                options=(FacetOptionCount(id="noExperience", title="Нет опыта", count=25),),
             ),
         ),
     )

@@ -108,3 +108,18 @@ class RunProgressResponse(BaseModel):
             error_code=error_code,
             error_message=error_message,
         )
+
+
+class RoleResponse(BaseModel):
+    id: str
+    name: str
+
+
+class RunEventResponse(BaseModel):
+    id: int
+    run_id: str
+    unit_id: str | None
+    occurred_at: datetime
+    level: str
+    event_type: str
+    message: str

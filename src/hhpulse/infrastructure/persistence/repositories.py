@@ -7,6 +7,7 @@ from datetime import UTC, date, datetime
 
 from hhpulse.application.ports.repositories import (
     AnalysisJobRepository,
+    CrawlEvent,
     CrawlExecutionRepository,
     CrawlProgress,
 )
@@ -206,6 +207,15 @@ class SqliteCrawlExecutionRepository(CrawlExecutionRepository):
                 """,
                 [self._unit_to_row(unit) for unit in units],
             )
+            self._append_event(
+                connection,
+                run_id=run.id,
+                unit_id=None,
+                at=run.started_at,
+                level="info",
+                event_type="run_started",
+                message=f"План сбора создан: {run.total_units} запросов",
+            )
             return run
 
         return await self._database.write(operation)
@@ -222,6 +232,16 @@ class SqliteCrawlExecutionRepository(CrawlExecutionRepository):
                 self._update_unit(connection, recovered)
             if rows and run.status is RunStatus.RUNNING:
                 self._update_run(connection, run.wait_for_source())
+            if rows:
+                self._append_event(
+                    connection,
+                    run_id=run_id,
+                    unit_id=None,
+                    at=at,
+                    level="warning",
+                    event_type="workers_recovered",
+                    message=f"После перезапуска восстановлено обработчиков: {len(rows)}",
+                )
             return len(rows)
 
         return await self._database.write(operation)
@@ -268,6 +288,15 @@ class SqliteCrawlExecutionRepository(CrawlExecutionRepository):
             claimed = self._unit_from_row(row)
             if run.status is RunStatus.WAITING_SOURCE:
                 self._update_run(connection, run.resume())
+            self._append_event(
+                connection,
+                run_id=run_id,
+                unit_id=claimed.id,
+                at=at,
+                level="info",
+                event_type="unit_started",
+                message=self._query_message(claimed, prefix=f"{worker_id}: запрос"),
+            )
             return claimed
 
         return await self._database.write(operation)
@@ -287,6 +316,15 @@ class SqliteCrawlExecutionRepository(CrawlExecutionRepository):
             self._update_unit(connection, deferred)
             if run.status is RunStatus.RUNNING:
                 self._update_run(connection, run.wait_for_source())
+            self._append_event(
+                connection,
+                run_id=unit.run_id,
+                unit_id=unit.id,
+                at=at,
+                level="warning",
+                event_type="retry_scheduled",
+                message=f"Повтор в {retry_at.isoformat()}: {error}",
+            )
 
         await self._database.write(operation)
 
@@ -315,6 +353,18 @@ class SqliteCrawlExecutionRepository(CrawlExecutionRepository):
             )
             self._update_unit(connection, completed_unit)
             self._update_run(connection, completed_run)
+            self._append_event(
+                connection,
+                run_id=run.id,
+                unit_id=unit.id,
+                at=at,
+                level="success",
+                event_type="unit_completed",
+                message=self._query_message(
+                    unit,
+                    prefix=f"Получено {observation.page.total_count}",
+                ),
+            )
             return completed_run
 
         return await self._database.write(operation)
@@ -331,6 +381,15 @@ class SqliteCrawlExecutionRepository(CrawlExecutionRepository):
             broken = run.parser_broken(message=message, at=at)
             self._cancel_incomplete_units(connection, run_id, message, at)
             self._update_run(connection, broken)
+            self._append_event(
+                connection,
+                run_id=run_id,
+                unit_id=None,
+                at=at,
+                level="error",
+                event_type="parser_broken",
+                message=message,
+            )
             return broken
 
         return await self._database.write(operation)
@@ -348,6 +407,15 @@ class SqliteCrawlExecutionRepository(CrawlExecutionRepository):
             failed = run.fail(code=code, message=message, at=at)
             self._cancel_incomplete_units(connection, run_id, message, at)
             self._update_run(connection, failed)
+            self._append_event(
+                connection,
+                run_id=run_id,
+                unit_id=None,
+                at=at,
+                level="error",
+                event_type="run_failed",
+                message=f"{code}: {message}",
+            )
             return failed
 
         return await self._database.write(operation)
@@ -359,6 +427,15 @@ class SqliteCrawlExecutionRepository(CrawlExecutionRepository):
             message = expired.error_message or "daily crawl expired"
             self._cancel_incomplete_units(connection, run_id, message, at)
             self._update_run(connection, expired)
+            self._append_event(
+                connection,
+                run_id=run_id,
+                unit_id=None,
+                at=at,
+                level="error",
+                event_type="run_expired",
+                message=message,
+            )
             return expired
 
         return await self._database.write(operation)
@@ -390,6 +467,15 @@ class SqliteCrawlExecutionRepository(CrawlExecutionRepository):
                 (run_id,),
             )
             self._update_run(connection, succeeded)
+            self._append_event(
+                connection,
+                run_id=run_id,
+                unit_id=None,
+                at=at,
+                level="success",
+                event_type="run_published",
+                message=f"Опубликован полный срез: {run.total_units} наблюдений",
+            )
             return succeeded
 
         return await self._database.write(operation)
@@ -436,6 +522,32 @@ class SqliteCrawlExecutionRepository(CrawlExecutionRepository):
                 (run_id,),
             ).fetchall()
             return tuple(self._unit_from_row(row) for row in rows)
+
+        return await self._database.read(operation)
+
+    async def list_events(self, run_id: str, *, limit: int = 200) -> Sequence[CrawlEvent]:
+        bounded_limit = max(1, min(limit, 1000))
+
+        def operation(connection: sqlite3.Connection) -> tuple[CrawlEvent, ...]:
+            rows = connection.execute(
+                """
+                SELECT * FROM crawl_events
+                WHERE run_id = ? ORDER BY id DESC LIMIT ?
+                """,
+                (run_id, bounded_limit),
+            ).fetchall()
+            return tuple(
+                CrawlEvent(
+                    id=int(row["id"]),
+                    run_id=str(row["run_id"]),
+                    unit_id=str(row["unit_id"]) if row["unit_id"] is not None else None,
+                    occurred_at=datetime.fromisoformat(str(row["occurred_at"])),
+                    level=str(row["level"]),
+                    event_type=str(row["event_type"]),
+                    message=str(row["message"]),
+                )
+                for row in rows
+            )
 
         return await self._database.read(operation)
 
@@ -487,6 +599,37 @@ class SqliteCrawlExecutionRepository(CrawlExecutionRepository):
         ).fetchall()
         for row in rows:
             self._update_unit(connection, self._unit_from_row(row).cancel(error=message, at=at))
+
+    @classmethod
+    def _append_event(
+        cls,
+        connection: sqlite3.Connection,
+        *,
+        run_id: str,
+        unit_id: str | None,
+        at: datetime | None,
+        level: str,
+        event_type: str,
+        message: str,
+    ) -> None:
+        if at is None:
+            raise ValueError("crawl event timestamp must not be empty")
+        connection.execute(
+            """
+            INSERT INTO crawl_events (
+                run_id, unit_id, occurred_at, level, event_type, message
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (run_id, unit_id, cls._datetime_to_db(at), level, event_type, message),
+        )
+
+    @staticmethod
+    def _query_message(unit: CrawlUnit, *, prefix: str) -> str:
+        query = unit.query
+        return (
+            f"{prefix}: роль {query.professional_role_id}, {query.experience.value}, "
+            f"{query.target.value}, регион {query.region_id}"
+        )
 
     @staticmethod
     def _unit_count(connection: sqlite3.Connection, run_id: str) -> int:
@@ -577,9 +720,7 @@ class SqliteCrawlExecutionRepository(CrawlExecutionRepository):
             started_at=SqliteCrawlExecutionRepository._datetime_from_db(row["started_at"]),
             finished_at=SqliteCrawlExecutionRepository._datetime_from_db(row["finished_at"]),
             error_code=str(row["error_code"]) if row["error_code"] is not None else None,
-            error_message=(
-                str(row["error_message"]) if row["error_message"] is not None else None
-            ),
+            error_message=(str(row["error_message"]) if row["error_message"] is not None else None),
         )
 
     @classmethod

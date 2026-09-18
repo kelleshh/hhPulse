@@ -93,9 +93,7 @@ def observation_from_json(raw: str) -> SearchObservation:
                             title=str(option["title"]),
                             count=int(option["count"]),
                             query=(
-                                str(option["query"])
-                                if option.get("query") is not None
-                                else None
+                                str(option["query"]) if option.get("query") is not None else None
                             ),
                             disabled=bool(option.get("disabled", False)),
                         )

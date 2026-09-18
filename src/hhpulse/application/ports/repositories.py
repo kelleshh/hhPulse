@@ -24,6 +24,17 @@ class CrawlProgress:
     next_retry_at: datetime | None
 
 
+@dataclass(frozen=True, slots=True)
+class CrawlEvent:
+    id: int
+    run_id: str
+    unit_id: str | None
+    occurred_at: datetime
+    level: str
+    event_type: str
+    message: str
+
+
 class AnalysisJobRepository(Protocol):
     async def add(self, job: AnalysisJob) -> None: ...
 
@@ -100,3 +111,5 @@ class CrawlExecutionRepository(Protocol):
     async def progress(self, run_id: str) -> CrawlProgress: ...
 
     async def list_units(self, run_id: str) -> Sequence[CrawlUnit]: ...
+
+    async def list_events(self, run_id: str, *, limit: int = 200) -> Sequence[CrawlEvent]: ...

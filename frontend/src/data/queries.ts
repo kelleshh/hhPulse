@@ -6,10 +6,12 @@ import { repository } from "./repository";
 export const queryKeys = {
   jobs: ["jobs"] as const,
   progress: (jobId: string) => ["progress", jobId] as const,
+  runEvents: (jobId: string) => ["run-events", jobId] as const,
   roles: ["roles"] as const,
   overview: (metric: MetricKey) => ["overview", metric] as const,
   comparison: (request: ComparisonRequest) => ["comparison", request] as const,
   snapshot: (date: string, roleId: string) => ["snapshot", date, roleId] as const,
+  roleMatrix: (dateTo?: string) => ["role-matrix", dateTo] as const,
   alerts: ["alerts"] as const,
   settings: ["settings"] as const,
 };
@@ -22,7 +24,14 @@ export const useProgress = (jobId: string, enabled = true) => useQuery({
   queryKey: queryKeys.progress(jobId),
   queryFn: () => repository.getTodayProgress(jobId),
   enabled: enabled && Boolean(jobId),
-  refetchInterval: 5_000,
+  refetchInterval: 2_000,
+});
+
+export const useRunEvents = (jobId: string, enabled = true) => useQuery({
+  queryKey: queryKeys.runEvents(jobId),
+  queryFn: () => repository.listRunEvents(jobId),
+  enabled: enabled && Boolean(jobId),
+  refetchInterval: 2_000,
 });
 
 export const useOverview = (metric: MetricKey) => useQuery({
@@ -40,6 +49,11 @@ export const useSnapshot = (date: string, roleId: string) => useQuery({
   queryKey: queryKeys.snapshot(date, roleId),
   queryFn: () => repository.getSnapshot(date, roleId),
   enabled: Boolean(date && roleId),
+});
+
+export const useRoleMatrix = (dateTo?: string) => useQuery({
+  queryKey: queryKeys.roleMatrix(dateTo),
+  queryFn: () => repository.getRoleMatrix(dateTo),
 });
 
 export const useAlerts = () => useQuery({ queryKey: queryKeys.alerts, queryFn: () => repository.listAlerts() });
@@ -65,7 +79,11 @@ export function useTriggerToday() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (jobId: string) => repository.triggerToday(jobId),
-    onSuccess: (_, jobId) => client.invalidateQueries({ queryKey: queryKeys.progress(jobId) }),
+    onSuccess: (_, jobId) => {
+      void client.invalidateQueries({ queryKey: queryKeys.progress(jobId) });
+      void client.invalidateQueries({ queryKey: queryKeys.runEvents(jobId) });
+      void client.invalidateQueries({ queryKey: ["overview"] });
+    },
   });
 }
 

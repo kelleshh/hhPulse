@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "hhpulse"
-version = "0.2.0"
+version = "0.3.0"
 description = "Local daily HH.ru labour-market analytics engine"
 readme = "README.md"
 authors = ["hhPulse"]
@@ -39,6 +39,8 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 
 [tool.ruff.lint.per-file-ignores]
 "src/hhpulse/infrastructure/hh/parser.py" = ["RUF001"]
+"src/hhpulse/application/analytics.py" = ["RUF001"]
+"src/hhpulse/infrastructure/persistence/repositories.py" = ["RUF001"]
 "tests/infrastructure/test_hh_parser.py" = ["RUF001"]
 
 [tool.mypy]

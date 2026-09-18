@@ -5,8 +5,8 @@ import { Button } from "../components/ui/Button";
 import { EmptyState, ErrorState, PageLoading } from "../components/ui/Feedback";
 import { SegmentedControl } from "../components/ui/SegmentedControl";
 import { useComparison, useRoles, useSettings } from "../data/queries";
-import { METRICS, VIEW_MODES } from "../domain/metrics";
-import type { MarketSeries, MetricKey, ViewMode } from "../domain/types";
+import { CHART_GEOMETRIES, METRICS, VIEW_MODES } from "../domain/metrics";
+import type { ChartGeometry, MarketSeries, MetricKey, ViewMode } from "../domain/types";
 
 const today = new Date();
 const dateTo = today.toISOString().slice(0, 10);
@@ -34,6 +34,7 @@ export function ComparePage() {
   const [selected, setSelected] = useState(["96", "156", "165"]);
   const [metric, setMetric] = useState<MetricKey>("hhIndex");
   const [mode, setMode] = useState<ViewMode>("absolute");
+  const [geometry, setGeometry] = useState<ChartGeometry>("line-points");
   const [experience, setExperience] = useState("any");
   const [experienceStrata, setExperienceStrata] = useState(["noExperience", "between1And3", "between3And6", "moreThan6"]);
   const [query, setQuery] = useState("");
@@ -48,6 +49,7 @@ export function ComparePage() {
     if (!settings.data || defaultsApplied.current) return;
     setMetric(settings.data.defaultMetric);
     setMode(settings.data.defaultViewMode);
+    setGeometry(settings.data.defaultChartGeometry);
     defaultsApplied.current = true;
   }, [settings.data]);
 
@@ -154,11 +156,12 @@ export function ComparePage() {
               </select>
             </label>
             <SegmentedControl label="Режим значений" value={mode} options={VIEW_MODES} onChange={setMode} />
+            <label className="field field--inline"><span>Геометрия</span><select value={geometry} onChange={(event) => setGeometry(event.target.value as ChartGeometry)}>{CHART_GEOMETRIES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
           </div>
           {comparison.isLoading ? <PageLoading label="Строю сравнение" /> : null}
           {comparison.error ? <ErrorState error={comparison.error} onRetry={() => comparison.refetch()} /> : null}
           {!comparison.isLoading && !comparison.error && selected.length === 0 ? <EmptyState title="Нечего сравнивать" description="Выберите хотя бы одну профессию слева." /> : null}
-          {comparison.data?.length ? <ComparisonChart series={comparison.data} metric={metric} mode={mode} height={470} /> : null}
+          {comparison.data?.length ? <ComparisonChart series={comparison.data} metric={metric} mode={mode} geometry={geometry} height={470} /> : null}
         </section>
       </div>
     </div>

@@ -108,7 +108,6 @@ class HhHtmlMarketSource:
         except HhParserContractBroken as exc:
             raise HhParserContractBroken(str(exc), raw_html=raw_html) from exc
 
-
     @staticmethod
     def _looks_like_challenge(body: str) -> bool:
         lowered = body.lower()

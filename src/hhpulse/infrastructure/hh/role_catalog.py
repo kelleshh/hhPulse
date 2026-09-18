@@ -55,7 +55,5 @@ class HhProfessionalRoleCatalogParser:
         role = ProfessionalRole(id=role_id, name=name)
         existing = roles.get(role_id)
         if existing is not None and existing.name != role.name:
-            raise HhParserContractBroken(
-                f"HH professional role {role_id!r} has conflicting names"
-            )
+            raise HhParserContractBroken(f"HH professional role {role_id!r} has conflicting names")
         roles[role_id] = role

@@ -59,8 +59,7 @@ async def test_completion_and_whole_run_publish_are_atomic(tmp_path) -> None:
     with sqlite3.connect(path) as connection:
         assert connection.execute("SELECT COUNT(*) FROM search_observations").fetchone()[0] == 0
         assert (
-            connection.execute("SELECT COUNT(*) FROM staged_search_observations").fetchone()[0]
-            == 1
+            connection.execute("SELECT COUNT(*) FROM staged_search_observations").fetchone()[0] == 1
         )
 
     published = await executions.publish_completed(planned.id, at=now)
@@ -69,8 +68,7 @@ async def test_completion_and_whole_run_publish_are_atomic(tmp_path) -> None:
     with sqlite3.connect(path) as connection:
         assert connection.execute("SELECT COUNT(*) FROM search_observations").fetchone()[0] == 1
         assert (
-            connection.execute("SELECT COUNT(*) FROM staged_search_observations").fetchone()[0]
-            == 0
+            connection.execute("SELECT COUNT(*) FROM staged_search_observations").fetchone()[0] == 0
         )
 
 

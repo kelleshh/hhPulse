@@ -7,13 +7,14 @@ import { ErrorState, PageLoading } from "../components/ui/Feedback";
 import { SegmentedControl } from "../components/ui/SegmentedControl";
 import { StatusBadge } from "../components/ui/StatusBadge";
 import { useOverview, useSettings } from "../data/queries";
-import { METRICS, VIEW_MODES } from "../domain/metrics";
-import type { MetricKey, ViewMode } from "../domain/types";
+import { CHART_GEOMETRIES, METRICS, VIEW_MODES } from "../domain/metrics";
+import type { ChartGeometry, MetricKey, ViewMode } from "../domain/types";
 
 export function DashboardPage() {
   const navigate = useNavigate();
   const [metric, setMetric] = useState<MetricKey>("hhIndex");
   const [mode, setMode] = useState<ViewMode>("absolute");
+  const [geometry, setGeometry] = useState<ChartGeometry>("line-points");
   const settings = useSettings();
   const defaultsApplied = useRef(false);
   const overview = useOverview(metric);
@@ -22,6 +23,7 @@ export function DashboardPage() {
     if (!settings.data || defaultsApplied.current) return;
     setMetric(settings.data.defaultMetric);
     setMode(settings.data.defaultViewMode);
+    setGeometry(settings.data.defaultChartGeometry);
     defaultsApplied.current = true;
   }, [settings.data]);
 
@@ -72,7 +74,7 @@ export function DashboardPage() {
             <div><dt>Повторные попытки</dt><dd>{Math.max(0, run.totalAttempts - run.completedUnits)}</dd></div>
             <div><dt>Ответы 429</dt><dd>{run.response429Count ?? 0}</dd></div>
           </dl>
-          <Link className="button button--secondary button--small" to="/jobs/moscow-market">Подробнее</Link>
+          <Link className="button button--secondary button--small" to={`/jobs/${run.jobId ?? ""}`}>Подробнее</Link>
         </section>
       ) : null}
 
@@ -90,9 +92,10 @@ export function DashboardPage() {
               </select>
             </label>
             <SegmentedControl label="Режим значений" value={mode} options={VIEW_MODES} onChange={setMode} />
+            <label className="field field--inline"><span>Геометрия</span><select value={geometry} onChange={(event) => setGeometry(event.target.value as ChartGeometry)}>{CHART_GEOMETRIES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
           </div>
         </div>
-        <ComparisonChart series={data.primarySeries} metric={metric} mode={mode} />
+        {data.primarySeries.length ? <ComparisonChart series={data.primarySeries} metric={metric} mode={mode} geometry={geometry} /> : <div className="data-vacuum"><strong>Пока нет опубликованных наблюдений</strong><span>Создайте задачу сбора и дождитесь полной публикации первого дня.</span></div>}
       </section>
     </div>
   );

@@ -7,6 +7,8 @@ import type {
   MetricKey,
   ObservationDay,
   Role,
+  RoleMatrixData,
+  RunEvent,
   RunProgress,
   SnapshotData,
 } from "../domain/types";
@@ -93,7 +95,11 @@ export function metricValue(metric: MetricKey, day: number, seed: number): numbe
   if (metric === "vacancies") return Math.round(1850 + seed * 7 + wave * 900 + day * 5);
   if (metric === "resumes") return Math.round(17500 + seed * 35 + wave * 5200 + day * 28);
   if (metric === "lowResponseShare") return 0.34 + (seed % 8) * 0.018 + wave;
-  return 0.48 + (seed % 7) * 0.02 - wave * 0.4;
+  if (metric === "salaryVisibleShare") return 0.48 + (seed % 7) * 0.02 - wave * 0.4;
+  if (metric === "remoteShare") return 0.18 + (seed % 9) * 0.025 + wave;
+  if (metric === "hybridShare") return 0.12 + (seed % 6) * 0.018 - wave * 0.2;
+  if (metric === "higherEducationShare") return 0.42 + (seed % 8) * 0.03 + wave;
+  return 0.08 + (seed % 7) * 0.022 - wave * 0.3;
 }
 
 export function makeSeries(roleIds: string[], metric: MetricKey, days = 45): MarketSeries[] {
@@ -175,6 +181,10 @@ export function makeSnapshot(date: string, roleId: string): SnapshotData {
     hhIndex: resumes / vacancies,
     lowResponseShare: metricValue("lowResponseShare", 42, seed),
     salaryVisibleShare: metricValue("salaryVisibleShare", 42, seed),
+    remoteShare: metricValue("remoteShare", 42, seed),
+    hybridShare: metricValue("hybridShare", 42, seed),
+    higherEducationShare: metricValue("higherEducationShare", 42, seed),
+    noExperienceShare: metricValue("noExperienceShare", 42, seed),
     distributions: {
       experience: distribution([
         ["none", "Без опыта", 214],
@@ -197,8 +207,51 @@ export function makeSnapshot(date: string, roleId: string): SnapshotData {
         ["part", "Частичная занятость", 122],
         ["project", "Проектная работа", 87],
       ]),
+      education: distribution([
+        ["higher", "Высшее", 1190],
+        ["not_required", "Не требуется", 620],
+      ]),
+      labels: distribution([
+        ["with_salary", "Указан доход", 958],
+        ["low_performance", "Меньше 10 откликов", 720],
+      ]),
     },
+    facets: {},
   };
+}
+
+export const DEMO_RUN_EVENTS: RunEvent[] = [
+  { id: 3, runId: DEMO_PROGRESS.runId, unitId: "unit-3", occurredAt: new Date().toISOString(), level: "success", eventType: "unit_completed", message: "Получено 2 843: роль 96, any, vacancy, регион 1" },
+  { id: 2, runId: DEMO_PROGRESS.runId, unitId: "unit-2", occurredAt: new Date(Date.now() - 2_000).toISOString(), level: "info", eventType: "unit_started", message: "worker-2: запрос: роль 156, any, resume, регион 1" },
+  { id: 1, runId: DEMO_PROGRESS.runId, unitId: null, occurredAt: new Date(Date.now() - 60_000).toISOString(), level: "info", eventType: "run_started", message: "План сбора создан: 1940 запросов" },
+];
+
+export function makeRoleMatrix(): RoleMatrixData {
+  const rows = DEMO_ROLES.map((role) => {
+    const seed = roleSeed(role.id);
+    const values = Object.fromEntries([
+      "hhIndex", "vacancies", "resumes", "lowResponseShare", "salaryVisibleShare",
+      "remoteShare", "hybridShare", "higherEducationShare", "noExperienceShare",
+    ].map((metric) => [metric, metricValue(metric as MetricKey, 42, seed)])) as Record<MetricKey, number>;
+    return {
+      roleId: role.id,
+      roleName: role.name,
+      ...values,
+      history: Array.from({ length: 30 }, (_, index) => ({
+        date: isoDay(29 - index),
+        hhIndex: metricValue("hhIndex", index, seed),
+        vacancies: metricValue("vacancies", index, seed),
+        resumes: metricValue("resumes", index, seed),
+        lowResponseShare: metricValue("lowResponseShare", index, seed),
+        salaryVisibleShare: metricValue("salaryVisibleShare", index, seed),
+        remoteShare: metricValue("remoteShare", index, seed),
+        hybridShare: metricValue("hybridShare", index, seed),
+        higherEducationShare: metricValue("higherEducationShare", index, seed),
+        noExperienceShare: metricValue("noExperienceShare", index, seed),
+      })),
+    };
+  });
+  return { date: isoDay(0), availableDates: [isoDay(0)], rows, statistics: {} };
 }
 
 export const DEMO_ALERTS: AlertItem[] = [
@@ -225,6 +278,7 @@ export const DEMO_ALERTS: AlertItem[] = [
 export const DEFAULT_SETTINGS: AppSettings = {
   defaultMetric: "hhIndex",
   defaultViewMode: "absolute",
+  defaultChartGeometry: "line-points",
   compactTables: false,
   reducedDataAnimation: false,
 };
