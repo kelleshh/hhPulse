@@ -17,16 +17,22 @@
   - общее число найденных вакансий/резюме;
   - весь `searchClusters` и его facet counts;
   - `professional_role` как обычный facet текущей выдачи, без использования его как полного каталога.
-- Async HH transport на `httpx` с пользовательскими `max_concurrency` и `max_rps`.
+- Один синхронный `requests.Session` на дневной запуск; блокирующий вызов вынесен из event loop
+  FastAPI через `asyncio.to_thread`.
+- После каждого ответа выдерживается пауза из усечённого нормального распределения
+  `N(1,35; 0,15²)` в строгих границах 0,9–1,8 секунды.
 - Адаптивный backoff: 429/502/503/504 только замедляют клиент; лимит пользователя никогда не
   превышается.
-- Режим User-Agent: один на все worker-ы или детерминированный UA на worker.
+- Один постоянный User-Agent и один последовательный HTTP-обработчик. Старые задачи с
+  per-worker режимом автоматически переводятся в безопасный профиль при старте.
+- Профессии случайно переставляются один раз на запуск с полным покрытием ID. Сначала строго
+  выполняется фаза всех резюме, затем в том же порядке фаза всех вакансий.
 - Persisted control-plane на SQLite/WAL: задачи, дневные run-ы, crawl-unit-ы.
 - Staging/publish модель: частичный run можно сохранять и продолжать после рестарта, а в
   published history он попадает только целиком.
-- FastAPI endpoints для создания, чтения, списка и включения/выключения задач.
+- FastAPI endpoints для создания, чтения, списка, включения/выключения и каскадного удаления задач.
 - Исполняемое ядро второй итерации:
-  - `PrepareOrResumeDailyRun` с тремя последовательными preflight-проверками;
+  - `PrepareOrResumeDailyRun` с одной последовательной preflight-проверкой;
   - атомарное создание persisted crawl units;
   - async worker pool с атомарным claim каждой единицы работы;
   - persisted retry timestamp и adaptive backoff после 429/временных ошибок;
@@ -45,7 +51,7 @@
 - Полный React/TypeScript frontend: обзор, шесть геометрий графиков, сравнение профессий,
   расширенный дневной срез, плотный пульт всех профессий, живой журнал сбора, задачи,
   события, настройки и CSV-выгрузка.
-- 46 автоматических тестов на доменные инварианты, parser contract, нулевую выдачу,
+- 55 автоматических тестов на доменные инварианты, parser contract, нулевую выдачу,
   восстановление после исправления парсера, полный role catalog,
   60-дневную методологию,
   rate/backoff, конкурентный claim, restart recovery, midnight expiry, persistence, staging,
@@ -66,7 +72,7 @@ frontend/
 └── src/pages/       # complete application routes
 ```
 
-Зависимости направлены внутрь. `domain` не знает о FastAPI, SQLite, httpx и hh.ru HTML.
+Зависимости направлены внутрь. `domain` не знает о FastAPI, SQLite, requests и hh.ru HTML.
 `application` зависит только от domain и Protocol-портов. Реализации находятся в `infrastructure`.
 
 Подробно: [`docs/architecture.md`](docs/architecture.md).
@@ -98,7 +104,7 @@ curl -X POST http://localhost:3000/api/v1/jobs \
     "role_selection_mode": "all",
     "role_ids": [],
     "max_concurrency": 1,
-    "max_rps": 0.5,
+    "max_rps": 1.0,
     "user_agent_mode": "shared"
   }'
 ```

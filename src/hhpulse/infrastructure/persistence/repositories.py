@@ -85,6 +85,18 @@ class SqliteAnalysisJobRepository(AnalysisJobRepository):
 
         await self._database.write(operation)
 
+    async def delete(self, job_id: str) -> bool:
+        """Delete a job and all of its persisted runs through SQLite cascades."""
+
+        def operation(connection: sqlite3.Connection) -> bool:
+            cursor = connection.execute(
+                "DELETE FROM analysis_jobs WHERE id = ?",
+                (job_id,),
+            )
+            return cursor.rowcount == 1
+
+        return await self._database.write(operation)
+
     @staticmethod
     def _to_row(job: AnalysisJob) -> tuple[object, ...]:
         return (
@@ -202,10 +214,10 @@ class SqliteCrawlExecutionRepository(CrawlExecutionRepository):
                 """
                 INSERT INTO crawl_units (
                     id, run_id, query_json, status, attempts, updated_at, last_error,
-                    retry_at, worker_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    retry_at, worker_id, plan_position
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                [self._unit_to_row(unit) for unit in units],
+                [(*self._unit_to_row(unit), position) for position, unit in enumerate(units)],
             )
             self._append_event(
                 connection,
@@ -264,11 +276,21 @@ class SqliteCrawlExecutionRepository(CrawlExecutionRepository):
                     status = ?, attempts = attempts + 1, updated_at = ?,
                     last_error = NULL, retry_at = NULL, worker_id = ?
                 WHERE id = (
-                    SELECT id FROM crawl_units
-                    WHERE run_id = ? AND (
-                        status = ? OR (status = ? AND (retry_at IS NULL OR retry_at <= ?))
+                    SELECT candidate.id FROM crawl_units AS candidate
+                    WHERE candidate.run_id = ?
+                      AND candidate.plan_position = (
+                          SELECT MIN(blocker.plan_position)
+                          FROM crawl_units AS blocker
+                          WHERE blocker.run_id = ?
+                            AND blocker.status IN (?, ?, ?)
+                      )
+                      AND (
+                        candidate.status = ? OR (
+                            candidate.status = ?
+                            AND (candidate.retry_at IS NULL OR candidate.retry_at <= ?)
+                        )
                     )
-                    ORDER BY id
+                    ORDER BY candidate.id
                     LIMIT 1
                 )
                 RETURNING *
@@ -278,6 +300,10 @@ class SqliteCrawlExecutionRepository(CrawlExecutionRepository):
                     self._datetime_to_db(at),
                     worker_id,
                     run_id,
+                    run_id,
+                    RunUnitStatus.PENDING.value,
+                    RunUnitStatus.RUNNING.value,
+                    RunUnitStatus.WAITING_RETRY.value,
                     RunUnitStatus.PENDING.value,
                     RunUnitStatus.WAITING_RETRY.value,
                     self._datetime_to_db(at),
@@ -553,7 +579,7 @@ class SqliteCrawlExecutionRepository(CrawlExecutionRepository):
     async def list_units(self, run_id: str) -> Sequence[CrawlUnit]:
         def operation(connection: sqlite3.Connection) -> tuple[CrawlUnit, ...]:
             rows = connection.execute(
-                "SELECT * FROM crawl_units WHERE run_id = ? ORDER BY id",
+                "SELECT * FROM crawl_units WHERE run_id = ? ORDER BY plan_position, id",
                 (run_id,),
             ).fetchall()
             return tuple(self._unit_from_row(row) for row in rows)

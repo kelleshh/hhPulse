@@ -26,6 +26,7 @@ export interface ComparisonRequest {
 export interface DataRepository {
   listJobs(): Promise<Job[]>;
   createJob(input: CreateJobInput): Promise<Job>;
+  deleteJob(jobId: string): Promise<void>;
   setJobEnabled(jobId: string, enabled: boolean): Promise<Job>;
   triggerToday(jobId: string): Promise<boolean>;
   getTodayProgress(jobId: string): Promise<RunProgress | null>;

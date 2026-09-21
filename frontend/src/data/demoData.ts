@@ -56,7 +56,7 @@ export const DEMO_JOBS: Job[] = [
     includeExperienceStrata: true,
     maxConcurrency: 1,
     maxRps: 0.5,
-    userAgentMode: "per_worker",
+    userAgentMode: "shared",
     timezone: "Europe/Moscow",
     methodologyVersion: "hh-index-daily-v1",
     activeResumeWindowDays: 60,

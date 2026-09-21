@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from hhpulse.api.dependencies import get_container
 from hhpulse.api.schemas import CreateJobRequest, JobResponse, SetJobEnabledRequest
 from hhpulse.application.dto import CreateAnalysisJobCommand
 from hhpulse.application.use_cases.jobs import (
     CreateAnalysisJob,
+    DeleteAnalysisJob,
     GetAnalysisJob,
     ListAnalysisJobs,
     SetAnalysisJobEnabled,
@@ -75,3 +76,19 @@ async def set_job_enabled(
     if job is None:
         raise HTTPException(status_code=404, detail="analysis job not found")
     return JobResponse.from_domain(job)
+
+
+@router.delete(
+    "/{job_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+async def delete_job(job_id: str, container: ContainerDependency) -> Response:
+    if await container.jobs.get(job_id) is None:
+        raise HTTPException(status_code=404, detail="analysis job not found")
+    if container.scheduler is not None:
+        await container.scheduler.cancel(job_id)
+    deleted = await DeleteAnalysisJob(container.jobs).execute(job_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="analysis job not found")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

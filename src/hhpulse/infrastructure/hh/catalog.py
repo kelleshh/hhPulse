@@ -3,12 +3,13 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime, timedelta
 
-import httpx
+import requests
 
 from hhpulse.application.ports.catalog import ProfessionalRoleCatalog
 from hhpulse.domain.value_objects import ProfessionalRole
 from hhpulse.infrastructure.hh.errors import HhSourceUnavailable
 from hhpulse.infrastructure.hh.role_catalog import HhProfessionalRoleCatalogParser
+from hhpulse.infrastructure.hh.user_agents import DEFAULT_HEADERS
 
 
 class HhProfessionalRoleCatalog(ProfessionalRoleCatalog):
@@ -37,19 +38,8 @@ class HhProfessionalRoleCatalog(ProfessionalRoleCatalog):
             if self._cached_at is not None and now - self._cached_at < self._ttl:
                 return self._cached
             try:
-                async with httpx.AsyncClient(
-                    timeout=self._timeout_seconds,
-                    follow_redirects=True,
-                ) as client:
-                    response = await client.get(
-                        self.URL,
-                        headers={
-                            "User-Agent": "hhPulse/0.3 local labour-market analytics",
-                            "Accept-Language": "ru-RU,ru;q=0.9",
-                        },
-                    )
-                response.raise_for_status()
-            except (httpx.RequestError, httpx.HTTPStatusError) as exc:
+                response = await asyncio.to_thread(self._fetch)
+            except requests.RequestException as exc:
                 if self._cached:
                     return self._cached
                 raise HhSourceUnavailable(f"HH role catalog request failed: {exc}") from exc
@@ -58,3 +48,10 @@ class HhProfessionalRoleCatalog(ProfessionalRoleCatalog):
             self._cached = tuple(sorted(roles, key=lambda role: role.name.casefold()))
             self._cached_at = now
             return self._cached
+
+    def _fetch(self) -> requests.Response:
+        with requests.Session() as session:
+            session.headers.update(DEFAULT_HEADERS)
+            response = session.get(self.URL, timeout=self._timeout_seconds)
+            response.raise_for_status()
+            return response

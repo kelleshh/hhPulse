@@ -44,6 +44,8 @@ class AnalysisJobRepository(Protocol):
 
     async def update(self, job: AnalysisJob) -> None: ...
 
+    async def delete(self, job_id: str) -> bool: ...
+
 
 class CrawlExecutionRepository(Protocol):
     """Transactional persistence boundary for the complete CrawlRun aggregate."""

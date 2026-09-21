@@ -69,6 +69,10 @@ class DailyCrawlScheduler:
             await self._executions.reopen_parser_broken(existing.id, at=self._clock.now())
         return await self._launch_if_due(job)
 
+    async def cancel(self, job_id: str) -> None:
+        """Stop an active crawl before its job and persisted aggregate are deleted."""
+        await self._cancel_active(job_id)
+
     async def run_once(self) -> None:
         self._remove_finished_tasks()
         for job in await self._jobs.list():

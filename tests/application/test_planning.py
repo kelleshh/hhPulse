@@ -1,3 +1,4 @@
+import random
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
@@ -48,7 +49,10 @@ def _job(*, all_roles: bool, include_experience: bool = True) -> AnalysisJob:
 
 
 async def test_all_roles_are_discovered_instead_of_hardcoded() -> None:
-    plan = await BuildDailyCrawlPlan(FakeMarketSource()).execute(
+    plan = await BuildDailyCrawlPlan(
+        FakeMarketSource(),
+        random_source=random.Random(42),
+    ).execute(
         _job(all_roles=True),
         observation_date=date(2026, 9, 17),
     )
@@ -57,6 +61,10 @@ async def test_all_roles_are_discovered_instead_of_hardcoded() -> None:
     # 2 roles * 5 experience strata * 2 sides (vacancy/resume)
     assert len(plan.queries) == 20
     assert {query.target for query in plan.queries} == {SearchTarget.VACANCY, SearchTarget.RESUME}
+    assert all(query.target is SearchTarget.RESUME for query in plan.queries[:10])
+    assert all(query.target is SearchTarget.VACANCY for query in plan.queries[10:])
+    assert {query.professional_role_id for query in plan.queries[:10]} == {"96", "160"}
+    assert {query.professional_role_id for query in plan.queries[10:]} == {"96", "160"}
 
 
 async def test_selected_role_reduces_plan_without_changing_discovery_contract() -> None:
@@ -67,3 +75,7 @@ async def test_selected_role_reduces_plan_without_changing_discovery_contract() 
 
     assert [role.id for role in plan.roles] == ["160"]
     assert len(plan.queries) == 2
+    assert [query.target for query in plan.queries] == [
+        SearchTarget.RESUME,
+        SearchTarget.VACANCY,
+    ]

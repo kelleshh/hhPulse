@@ -67,6 +67,20 @@ export function useCreateJob() {
   });
 }
 
+export function useDeleteJob() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (jobId: string) => repository.deleteJob(jobId),
+    onSuccess: (_, jobId) => {
+      client.removeQueries({ queryKey: queryKeys.progress(jobId) });
+      client.removeQueries({ queryKey: queryKeys.runEvents(jobId) });
+      void client.invalidateQueries({ queryKey: queryKeys.jobs });
+      void client.invalidateQueries({ queryKey: ["overview"] });
+      void client.invalidateQueries({ queryKey: queryKeys.alerts });
+    },
+  });
+}
+
 export function useSetJobEnabled() {
   const client = useQueryClient();
   return useMutation({

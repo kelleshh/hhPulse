@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS crawl_units (
     last_error TEXT,
     retry_at TEXT,
     worker_id TEXT,
+    plan_position INTEGER NOT NULL,
     UNIQUE(run_id, query_json)
 );
 
@@ -127,10 +128,48 @@ class SqliteDatabase:
             connection.execute("ALTER TABLE crawl_units ADD COLUMN retry_at TEXT")
         if "worker_id" not in columns:
             connection.execute("ALTER TABLE crawl_units ADD COLUMN worker_id TEXT")
+        if "plan_position" not in columns:
+            connection.execute(
+                "ALTER TABLE crawl_units ADD COLUMN plan_position INTEGER NOT NULL DEFAULT 0"
+            )
+            connection.execute(
+                """
+                WITH ranked AS (
+                    SELECT id, ROW_NUMBER() OVER (PARTITION BY run_id ORDER BY id) - 1 AS position
+                    FROM crawl_units
+                )
+                UPDATE crawl_units
+                SET plan_position = (
+                    SELECT position FROM ranked WHERE ranked.id = crawl_units.id
+                )
+                """
+            )
         connection.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_crawl_units_ready
             ON crawl_units(run_id, status, retry_at)
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_crawl_units_plan
+            ON crawl_units(run_id, plan_position, status, retry_at)
+            """
+        )
+        # Safety migration: old releases allowed parallel requests and one browser
+        # identity per worker. Keep existing jobs, but make their next run use the
+        # same sequential profile as the proven standalone collector.
+        connection.execute(
+            """
+            UPDATE analysis_jobs
+            SET max_concurrency = 1,
+                max_rps = MIN(max_rps, 1.0),
+                user_agent_mode = 'shared',
+                include_experience_strata = 0
+            WHERE max_concurrency != 1
+               OR max_rps > 1.0
+               OR user_agent_mode != 'shared'
+               OR include_experience_strata != 0
             """
         )
 

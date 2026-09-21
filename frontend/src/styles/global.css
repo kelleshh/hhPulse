@@ -97,6 +97,7 @@ p { line-height: 1.55; }
 .button--quiet { color: var(--signal-dark); background: transparent; }
 .button--quiet:hover:not(:disabled) { background: var(--ice); }
 .button--danger { color: #fff; background: var(--red); }
+.page-heading__actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .button:disabled { opacity: .5; }
 .button__icon { display: inline-flex; }
 .icon-button { display: inline-grid; width: 38px; height: 38px; padding: 0; place-items: center; color: var(--muted); background: transparent; border: 1px solid transparent; border-radius: 8px; text-decoration: none; }

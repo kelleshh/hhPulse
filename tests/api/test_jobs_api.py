@@ -33,6 +33,9 @@ class InMemoryJobs:
     async def update(self, job: AnalysisJob) -> None:
         self.items[job.id] = job
 
+    async def delete(self, job_id: str) -> bool:
+        return self.items.pop(job_id, None) is not None
+
 
 class UnusedExecutions:
     async def get_for_job_date(self, job_id, observation_date):
@@ -42,6 +45,7 @@ class UnusedExecutions:
 class FakeScheduler:
     def __init__(self) -> None:
         self.triggers: list[str] = []
+        self.cancelled: list[str] = []
 
     async def start(self) -> None:
         return None
@@ -52,6 +56,9 @@ class FakeScheduler:
     async def trigger(self, job_id: str) -> bool:
         self.triggers.append(job_id)
         return True
+
+    async def cancel(self, job_id: str) -> None:
+        self.cancelled.append(job_id)
 
 
 def _client(*, scheduler=None) -> TestClient:
@@ -123,3 +130,25 @@ def test_manual_run_endpoint_delegates_to_scheduler() -> None:
     assert response.status_code == 202
     assert response.json() == {"accepted": True}
     assert scheduler.triggers == [created["id"]]
+
+
+def test_delete_job_cancels_active_work_and_removes_job() -> None:
+    scheduler = FakeScheduler()
+    with _client(scheduler=scheduler) as client:
+        created = client.post(
+            "/api/v1/jobs",
+            json={"name": "Москва", "region_ids": ["1"]},
+        ).json()
+        response = client.delete(f"/api/v1/jobs/{created['id']}")
+        listed = client.get("/api/v1/jobs")
+
+    assert response.status_code == 204
+    assert response.content == b""
+    assert listed.json() == []
+    assert scheduler.cancelled == [created["id"]]
+
+
+def test_delete_missing_job_returns_404() -> None:
+    with _client() as client:
+        response = client.delete("/api/v1/jobs/missing")
+    assert response.status_code == 404

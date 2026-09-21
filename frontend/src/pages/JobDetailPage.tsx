@@ -1,9 +1,11 @@
-import { ArrowLeft, CirclePlay, Radio, RotateCcw } from "lucide-react";
-import { Link, useParams } from "react-router-dom";
+import { ArrowLeft, CirclePlay, Radio, RotateCcw, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { Button } from "../components/ui/Button";
+import { Dialog } from "../components/ui/Dialog";
 import { EmptyState, ErrorState, PageLoading } from "../components/ui/Feedback";
 import { StatusBadge } from "../components/ui/StatusBadge";
-import { useJobs, useProgress, useRunEvents, useTriggerToday } from "../data/queries";
+import { useDeleteJob, useJobs, useProgress, useRunEvents, useTriggerToday } from "../data/queries";
 
 const eventLabels: Record<string, string> = {
   run_started: "План запуска создан",
@@ -20,10 +22,13 @@ const eventLabels: Record<string, string> = {
 
 export function JobDetailPage() {
   const { jobId = "" } = useParams();
+  const navigate = useNavigate();
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const jobs = useJobs();
   const progress = useProgress(jobId);
   const events = useRunEvents(jobId);
   const trigger = useTriggerToday();
+  const deleteJob = useDeleteJob();
   const job = jobs.data?.find((item) => item.id === jobId);
 
   if (jobs.isLoading || progress.isLoading) return <PageLoading label="Загружаю состояние задачи" />;
@@ -32,13 +37,20 @@ export function JobDetailPage() {
 
   const run = progress.data;
   const percent = run && run.totalUnits > 0 ? (run.completedUnits / run.totalUnits) * 100 : 0;
+  const confirmDelete = async () => {
+    await deleteJob.mutateAsync(job.id);
+    navigate("/jobs", { replace: true });
+  };
 
   return (
     <div className="page">
       <Link className="back-link" to="/jobs"><ArrowLeft size={16} />Все задачи</Link>
       <header className="page-heading page-heading--split">
         <div><h1>{job.name}</h1><p>{job.roleSelectionMode === "all" ? "Все профессии HH" : `${job.roleIds.length} профессии`} · регион {job.regionIds.join(", ")} · {job.timezone}</p></div>
-        <Button variant="primary" icon={run ? <RotateCcw size={17} /> : <CirclePlay size={17} />} disabled={!job.enabled || trigger.isPending} onClick={() => trigger.mutate(job.id)}>{run ? "Продолжить сегодня" : "Запустить сегодня"}</Button>
+        <div className="page-heading__actions">
+          <Button variant="danger" icon={<Trash2 size={17} />} onClick={() => setDeleteOpen(true)}>Удалить</Button>
+          <Button variant="primary" icon={run ? <RotateCcw size={17} /> : <CirclePlay size={17} />} disabled={!job.enabled || trigger.isPending} onClick={() => trigger.mutate(job.id)}>{run ? "Продолжить сегодня" : "Запустить сегодня"}</Button>
+        </div>
       </header>
 
       {!run ? <EmptyState title="Сегодняшний запуск ещё не создан" description="Запустите задачу вручную или дождитесь следующей проверки планировщика." /> : (
@@ -74,6 +86,20 @@ export function JobDetailPage() {
           </section>
         </>
       )}
+      <Dialog
+        open={deleteOpen}
+        title="Удалить задачу?"
+        description="Задача, все её запуски, наблюдения и журнал будут удалены без возможности восстановления."
+        onClose={() => setDeleteOpen(false)}
+      >
+        {deleteJob.error ? <p className="form-error" role="alert">{deleteJob.error.message}</p> : null}
+        <div className="dialog__actions">
+          <Button variant="quiet" onClick={() => setDeleteOpen(false)}>Отменить</Button>
+          <Button variant="danger" disabled={deleteJob.isPending} onClick={() => void confirmDelete()}>
+            {deleteJob.isPending ? "Удаляю…" : "Удалить каскадом"}
+          </Button>
+        </div>
+      </Dialog>
     </div>
   );
 }

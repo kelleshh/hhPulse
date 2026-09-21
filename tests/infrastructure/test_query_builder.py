@@ -23,6 +23,11 @@ def test_resume_query_uses_exact_60_day_active_window_and_relocation_contract() 
     assert params.count(("job_search_status", "looking_for_offers")) == 1
     assert params.count(("job_search_status", "unknown")) == 1
     assert ("experience", "between1And3") in params
+    assert ("gender", "unknown") in params
+    assert ("hhtmFrom", "resume_search_form") in params
+    assert ("L_save_area", "true") in params
+    assert ("text", "") in params
+    assert ("ored_clusters", "true") not in params
 
 
 def test_vacancy_query_does_not_add_experience_for_any_band() -> None:

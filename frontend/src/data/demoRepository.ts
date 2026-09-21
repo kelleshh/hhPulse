@@ -55,6 +55,12 @@ export class DemoRepository implements DataRepository {
     return job;
   }
 
+  async deleteJob(jobId: string): Promise<void> {
+    const jobs = await this.listJobs();
+    if (!jobs.some((job) => job.id === jobId)) throw new Error("Задача не найдена");
+    writeJson(JOBS_KEY, jobs.filter((job) => job.id !== jobId));
+  }
+
   async setJobEnabled(jobId: string, enabled: boolean): Promise<Job> {
     const jobs = await this.listJobs();
     const job = jobs.find((item) => item.id === jobId);

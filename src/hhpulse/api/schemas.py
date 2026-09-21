@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -16,12 +17,12 @@ class CreateJobRequest(BaseModel):
     region_ids: list[str] = Field(min_length=1)
     role_selection_mode: RoleSelectionMode = RoleSelectionMode.ALL
     role_ids: list[str] = Field(default_factory=list)
-    max_concurrency: int = Field(default=1, ge=1, le=32)
-    max_rps: float = Field(default=0.5, gt=0, le=20)
-    user_agent_mode: UserAgentMode = UserAgentMode.SHARED
+    max_concurrency: Literal[1] = 1
+    max_rps: float = Field(default=1.0, gt=0, le=1.0)
+    user_agent_mode: Literal[UserAgentMode.SHARED] = UserAgentMode.SHARED
     timezone: str = "Europe/Moscow"
     enabled: bool = True
-    include_experience_strata: bool = True
+    include_experience_strata: bool = False
 
 
 class SetJobEnabledRequest(BaseModel):

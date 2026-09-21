@@ -141,6 +141,10 @@ export class HttpRepository implements DataRepository {
     return mapJob(jobSchema.parse(data));
   }
 
+  async deleteJob(jobId: string): Promise<void> {
+    await this.request<void>(`/api/v1/jobs/${jobId}`, { method: "DELETE" });
+  }
+
   async setJobEnabled(jobId: string, enabled: boolean): Promise<Job> {
     const data = await this.request<unknown>(`/api/v1/jobs/${jobId}/enabled`, {
       method: "PATCH",

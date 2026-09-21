@@ -19,7 +19,7 @@ class AnalysisScope:
     region_ids: tuple[str, ...]
     role_selection_mode: RoleSelectionMode
     role_ids: tuple[str, ...] = ()
-    include_experience_strata: bool = True
+    include_experience_strata: bool = False
 
     def __post_init__(self) -> None:
         regions = unique_strings(self.region_ids, field_name="region_ids")

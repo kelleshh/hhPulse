@@ -68,3 +68,11 @@ class SetAnalysisJobEnabled:
         updated = job.set_enabled(enabled, at=self._clock.now())
         await self._repository.update(updated)
         return updated
+
+
+class DeleteAnalysisJob:
+    def __init__(self, repository: AnalysisJobRepository) -> None:
+        self._repository = repository
+
+    async def execute(self, job_id: str) -> bool:
+        return await self._repository.delete(job_id)

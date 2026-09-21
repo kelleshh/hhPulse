@@ -15,7 +15,7 @@ class Settings:
     source_timeout_seconds: float = 30.0
     retry_initial_seconds: float = 5.0
     retry_max_seconds: float = 900.0
-    preflight_successes: int = 3
+    preflight_successes: int = 1
     scheduler_poll_seconds: float = 30.0
 
     @classmethod

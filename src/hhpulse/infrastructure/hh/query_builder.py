@@ -51,13 +51,16 @@ class HhQueryBuilder:
             ("job_search_status", "active_search"),
             ("job_search_status", "looking_for_offers"),
             ("job_search_status", "unknown"),
+            ("gender", "unknown"),
             ("order_by", "relevance"),
             ("search_period", "-1"),
             ("date_from", date_from.strftime("%d.%m.%Y")),
             ("date_to", date_to.strftime("%d.%m.%Y")),
             ("items_on_page", "50"),
             ("no_magic", "true"),
-            ("ored_clusters", "true"),
+            ("hhtmFrom", "resume_search_form"),
+            ("L_save_area", "true"),
+            ("text", ""),
             ("professional_role", query.professional_role_id),
         ]
         if query.experience is not ExperienceBand.ANY:

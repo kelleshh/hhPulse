@@ -13,9 +13,9 @@ packages = [{ include = "hhpulse", from = "src" }]
 [tool.poetry.dependencies]
 python = ">=3.12,<4.0"
 beautifulsoup4 = ">=4.12,<5"
-fastapi = ">=0.115,<1"
-httpx = ">=0.27,<1"
+fastapi = ">=0.115,<0.116"
 pydantic = ">=2.10,<3"
+requests = ">=2.32,<3"
 uvicorn = { version = ">=0.34,<1", extras = ["standard"] }
 
 [tool.poetry.dev-dependencies]
@@ -23,6 +23,8 @@ pytest = ">=8,<10"
 pytest-asyncio = ">=0.24,<2"
 ruff = ">=0.9,<1"
 mypy = ">=1.14,<2"
+types-requests = ">=2.32,<3"
+httpx = ">=0.27,<1" # only FastAPI TestClient; HH transport uses requests.Session
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

@@ -30,7 +30,7 @@ class PrepareOrResumeDailyRun:
         self,
         executions: CrawlExecutionRepository,
         *,
-        preflight_successes: int = 3,
+        preflight_successes: int = 1,
     ) -> None:
         if preflight_successes < 1:
             raise ValueError("preflight_successes must be positive")
@@ -316,7 +316,7 @@ class ExecuteDailyCrawl:
         sleeper: Sleeper,
         retry_policy: RetryPolicy,
         *,
-        preflight_successes: int = 3,
+        preflight_successes: int = 1,
     ) -> None:
         self._executions = executions
         self._source_factory = source_factory

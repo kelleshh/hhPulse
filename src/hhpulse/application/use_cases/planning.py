@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
@@ -25,13 +26,15 @@ class CrawlPlan:
 
 
 class BuildDailyCrawlPlan:
-    """Builds deterministic HH queries without embedding a static role catalog."""
+    """Builds a complete plan with one randomized role order shared by both phases."""
 
-    def __init__(self, source: MarketSource) -> None:
+    def __init__(self, source: MarketSource, *, random_source: random.Random | None = None) -> None:
         self._source = source
+        self._random = random_source or random.Random()
 
     async def execute(self, job: AnalysisJob, *, observation_date: date) -> CrawlPlan:
-        roles = await self._resolve_roles(job)
+        roles = list(await self._resolve_roles(job))
+        self._random.shuffle(roles)
         experience_bands = (
             EXPERIENCE_STRATA if job.scope.include_experience_strata else (ExperienceBand.ANY,)
         )
@@ -43,10 +46,10 @@ class BuildDailyCrawlPlan:
                 professional_role_id=role.id,
                 experience=experience,
             )
+            for target in (SearchTarget.RESUME, SearchTarget.VACANCY)
             for region_id in sorted(job.scope.region_ids)
-            for role in sorted(roles, key=lambda item: item.id)
+            for role in roles
             for experience in experience_bands
-            for target in (SearchTarget.VACANCY, SearchTarget.RESUME)
         )
         return CrawlPlan(roles=tuple(roles), queries=queries)
 

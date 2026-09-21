@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useCreateJob, useRoles } from "../../data/queries";
-import type { CreateJobInput, UserAgentMode } from "../../domain/types";
+import type { CreateJobInput } from "../../domain/types";
 import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";
 import { Toggle } from "../ui/Toggle";
@@ -15,9 +15,9 @@ const initialForm: CreateJobInput = {
   regionIds: ["1"],
   roleSelectionMode: "all",
   roleIds: [],
-  includeExperienceStrata: true,
+  includeExperienceStrata: false,
   maxConcurrency: 1,
-  maxRps: 0.5,
+  maxRps: 1,
   userAgentMode: "shared",
   timezone: "Europe/Moscow",
   enabled: true,
@@ -75,11 +75,11 @@ export function CreateJobDialog({ open, onClose }: CreateJobDialogProps) {
         <section>
           <h3>Нагрузка на HH</h3>
           <div className="form-grid">
-            <label className="field"><span>Одновременные запросы</span><input type="number" min={1} max={32} value={form.maxConcurrency} onChange={(event) => setForm({ ...form, maxConcurrency: event.target.valueAsNumber })} /></label>
-            <label className="field"><span>Максимум запросов/с</span><input type="number" min={0.1} max={20} step={0.1} value={form.maxRps} onChange={(event) => setForm({ ...form, maxRps: event.target.valueAsNumber })} /></label>
+            <label className="field"><span>Одновременные запросы</span><input type="number" value={1} disabled /></label>
+            <label className="field"><span>Максимум запросов/с</span><input type="number" min={0.1} max={1} step={0.1} value={form.maxRps} onChange={(event) => setForm({ ...form, maxRps: event.target.valueAsNumber })} /></label>
           </div>
-          <label className="field"><span>User-Agent</span><select value={form.userAgentMode} onChange={(event) => setForm({ ...form, userAgentMode: event.target.value as UserAgentMode })}><option value="shared">Один для всего сборщика</option><option value="per_worker">Отдельный для каждого обработчика</option></select></label>
-          <p className="form-note">При ответах 429 фактическая скорость снизится автоматически и никогда не превысит этот лимит.</p>
+          <input type="hidden" value={form.userAgentMode} />
+          <p className="form-note">Один requests.Session и постоянный User-Agent. После каждого ответа — случайная пауза 0,9–1,8 с. Сначала собираются все резюме, затем все вакансии. При WAF/403 запуск немедленно остановится.</p>
         </section>
 
         {createJob.error ? <p className="form-error" role="alert">{createJob.error.message}</p> : null}

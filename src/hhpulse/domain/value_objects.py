@@ -35,7 +35,7 @@ class Region:
 @dataclass(frozen=True, slots=True)
 class RateLimitPolicy:
     max_concurrency: int = 1
-    max_rps: float = 0.5
+    max_rps: float = 1.0
 
     def __post_init__(self) -> None:
         if self.max_concurrency < 1:
