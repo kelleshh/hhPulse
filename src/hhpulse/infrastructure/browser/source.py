@@ -35,9 +35,8 @@ def search_url(query: SearchQuery) -> str:
             ("area", area),
             ("no_magic", "true"),
             ("ored_clusters", "true"),
+            ("professional_role", query.professional_role_id),
         ]
-        if query.professional_role_id != "*":
-            params.append(("professional_role", query.professional_role_id))
     else:
         start = query.observation_date - timedelta(days=59)
         params = [
@@ -80,7 +79,6 @@ class BrowserMarketSource:
     ) -> None:
         self._bridge = bridge
         self._catalog = catalog
-        self._job = job
         self._roles: tuple[ProfessionalRole, ...] = ()
         self._next_at = 0.0
 
@@ -95,6 +93,8 @@ class BrowserMarketSource:
         return self._roles
 
     async def fetch(self, query: SearchQuery, *, worker_index: int = 0) -> ParsedSearchPage:
+        if query.professional_role_id == "*":
+            raise ParserContractBroken("old vacancy tree search cannot be counted per role")
         if not self._roles:
             await self.discover_roles(region_id=query.region_id)
         if not self._bridge.connected:
@@ -106,7 +106,7 @@ class BrowserMarketSource:
             result = await self._bridge.request(
                 url=expected_url,
                 target=query.target.value,
-                timeout_seconds=240 if query.target is SearchTarget.VACANCY else 120,
+                timeout_seconds=120,
             )
         finally:
             self._next_at = loop.time() + 2.0 + random.uniform(0.0, 2.0)
@@ -134,55 +134,15 @@ class BrowserMarketSource:
                 raise ParserContractBroken(
                     "resume full count differs from visible + hidden for this search"
                 )
-            role = next((r for r in self._roles if r.id == query.professional_role_id), None)
-            if role is None:
-                raise ParserContractBroken("searched resume role is absent from the role catalog")
-            facet = FacetGroup("professional_role", (FacetOptionCount(role.id, role.name, total),))
-            return ParsedSearchPage(
-                total_count=total,
-                facets=(facet,),
-                methodology_version="hh-browser-complete-count-v1",
-            )
-
-        if result.get("tree_complete") is not True:
-            raise ParserContractBroken(
-                "vacancy profession tree was not fully expanded and traversed"
-            )
-        raw_roles = result.get("roles")
-        if not isinstance(raw_roles, list):
-            raise ParserContractBroken("vacancy tree has no role counts")
-        observed: dict[str, FacetOptionCount] = {}
-        for item in raw_roles:
-            if not isinstance(item, dict) or not str(item.get("id", "")).isdigit():
-                raise ParserContractBroken("invalid vacancy profession entry")
-            role_id = str(item["id"])
-            option = FacetOptionCount(
-                role_id,
-                str(item.get("name", "")).strip(),
-                self._number(item.get("count"), "role count"),
-            )
-            if role_id in observed and observed[role_id] != option:
-                raise ParserContractBroken(f"conflicting vacancy count for profession {role_id}")
-            observed[role_id] = option
-        if total > 0 and not observed:
-            raise ParserContractBroken("vacancy tree contains no professions")
-        known_ids = {role.id for role in self._roles}
-        if not self._job.scope.role_ids and observed.keys() - known_ids:
-            raise ParserContractBroken("vacancy tree has new role IDs absent from the catalog")
-        for role in self._roles:
-            observed.setdefault(role.id, FacetOptionCount(role.id, role.name, 0))
-        selected = (
-            set(self._job.scope.role_ids)
-            if self._job.scope.role_ids
-            else {r.id for r in self._roles}
-        )
-        options = tuple(observed[role_id] for role_id in sorted(selected) if role_id in observed)
-        if len(options) != len(selected):
-            raise ParserContractBroken("selected professions missing from the vacancy tree/catalog")
+        role = next((r for r in self._roles if r.id == query.professional_role_id), None)
+        if role is None:
+            raise ParserContractBroken("searched role is absent from the role catalog")
         return ParsedSearchPage(
             total_count=total,
-            facets=(FacetGroup("professional_role", options),),
-            methodology_version="hh-browser-complete-count-v1",
+            facets=(
+                FacetGroup("professional_role", (FacetOptionCount(role.id, role.name, total),)),
+            ),
+            methodology_version="hh-browser-per-role-v2",
         )
 
     @staticmethod

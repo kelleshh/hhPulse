@@ -132,8 +132,9 @@ class SqliteDatabase:
                 )
         connection.execute(
             "UPDATE analysis_jobs SET methodology_version = ? "
-            "WHERE methodology_version = 'hh-api-vacancy-daily-v2'",
-            ("hh-browser-complete-count-v1",),
+            "WHERE methodology_version IN "
+            "('hh-api-vacancy-daily-v2', 'hh-browser-complete-count-v1')",
+            ("hh-browser-per-role-v2",),
         )
         columns = {
             str(row["name"])

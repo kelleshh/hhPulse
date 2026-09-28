@@ -73,51 +73,41 @@ async def test_hidden_resumes_are_never_assigned_to_a_different_filtered_search(
         await source.fetch(query(SearchTarget.RESUME, "96"))
 
 
-async def test_complete_vacancy_tree_yields_each_profession_once():
-    bridge = Bridge(
-        {
-            "status": "ok",
-            "total": 300,
-            "tree_complete": True,
-            "roles": [
-                {"id": "96", "name": "Разработчик", "count": 20},
-                {"id": "160", "name": "DevOps", "count": 10},
-            ],
-        }
-    )
+async def test_vacancy_count_comes_from_its_own_profession_url():
+    bridge = Bridge({"status": "ok", "total": 20})
     source = BrowserMarketSource(bridge, Catalog(), job())
     await source.discover_roles(region_id="1")
-    page = await source.fetch(query(SearchTarget.VACANCY))
+    page = await source.fetch(query(SearchTarget.VACANCY, "96"))
     assert {role.id: role.count for role in page.facet("professional_role").options} == {
         "96": 20,
-        "160": 10,
     }
-    assert "professional_role=" not in bridge.url
+    assert "professional_role=96" in bridge.url
+    assert page.methodology_version == "hh-browser-per-role-v2"
 
 
-async def test_incomplete_tree_or_block_never_publishes_a_count():
-    bridge = Bridge({"status": "ok", "total": 300, "tree_complete": False, "roles": []})
+async def test_missing_count_or_block_never_publishes_a_count():
+    bridge = Bridge({"status": "ok"})
     source = BrowserMarketSource(bridge, Catalog(), job())
     await source.discover_roles(region_id="1")
     with pytest.raises(ParserContractBroken):
-        await source.fetch(query(SearchTarget.VACANCY))
+        await source.fetch(query(SearchTarget.VACANCY, "96"))
     bridge.result = {"status": "blocked", "reason": "too many requests"}
     with pytest.raises(MarketSourceRejected):
-        await source.fetch(query(SearchTarget.VACANCY))
+        await source.fetch(query(SearchTarget.VACANCY, "96"))
 
 
-async def test_new_profession_not_in_fallback_catalog_aborts_all_roles_run():
-    bridge = Bridge(
-        {
-            "status": "ok",
-            "total": 10,
-            "tree_complete": True,
-            "roles": [{"id": "99999", "name": "Новая роль", "count": 10}],
-        }
-    )
+async def test_unknown_profession_cannot_be_published():
+    bridge = Bridge({"status": "ok", "total": 10})
     source = BrowserMarketSource(bridge, Catalog(), job())
     await source.discover_roles(region_id="1")
-    with pytest.raises(ParserContractBroken, match="new role IDs"):
+    with pytest.raises(ParserContractBroken, match="absent from the role catalog"):
+        await source.fetch(query(SearchTarget.VACANCY, "99999"))
+
+
+async def test_old_tree_unit_cannot_publish_a_shared_count_for_every_role():
+    bridge = Bridge({"status": "ok", "total": 300})
+    source = BrowserMarketSource(bridge, Catalog(), job())
+    with pytest.raises(ParserContractBroken, match="old vacancy tree"):
         await source.fetch(query(SearchTarget.VACANCY))
 
 

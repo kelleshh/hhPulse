@@ -56,3 +56,26 @@ def test_role_counts_and_full_filtered_resume_counts_stay_separate():
     assert MarketAnalytics._metric(by_role["96"], "salaryVisibleShare") == 0.4
     assert MarketAnalytics._metric(by_role["96"], "resumeSalaryVisibleShare") == 0.4
     assert MarketAnalytics._metric(by_role["160"], "resumeSalaryVisibleShare") is None
+
+
+def test_per_role_vacancy_urls_join_full_resume_counts_and_filtered_slices():
+    records = [
+        record(SearchTarget.VACANCY, "96", 20, roles=(("96", "Разработчик", 20),)),
+        record(
+            SearchTarget.VACANCY, "96", 8,
+            filters=(QueryFilter.one("label", "with_salary"),),
+            roles=(("96", "Разработчик", 8),),
+        ),
+        record(SearchTarget.RESUME, "96", 200, roles=(("96", "Разработчик", 200),)),
+        record(
+            SearchTarget.RESUME, "96", 80,
+            filters=(QueryFilter.one("label", "only_with_salary"),),
+            roles=(("96", "Разработчик", 80),),
+        ),
+    ]
+    [row] = MarketAnalytics._aggregate(records)
+    assert (row.role_id, row.role_name, row.vacancies, row.resumes, row.hh_index) == (
+        "96", "Разработчик", 20, 200, 10,
+    )
+    assert MarketAnalytics._metric(row, "salaryVisibleShare") == 0.4
+    assert MarketAnalytics._metric(row, "resumeSalaryVisibleShare") == 0.4

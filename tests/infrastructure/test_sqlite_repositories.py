@@ -184,13 +184,20 @@ async def test_existing_jobs_gain_optional_slices_without_losing_history(tmp_pat
             ('old', 'История', '["1"]', 'all', '[]', 0, 2, 2.0, 'shared',
              'Europe/Moscow', 'hh-api-vacancy-daily-v2', 60, 1,
              '2026-09-17T12:00:00+03:00', '2026-09-17T12:00:00+03:00')""")
+        connection.execute("""INSERT INTO analysis_jobs VALUES
+            ('browser-v1', 'Previous browser run', '["1"]', 'all', '[]', 0, 1, 0.25,
+             'shared', 'Europe/Moscow', 'hh-browser-complete-count-v1', 60, 1,
+             '2026-09-28T12:00:00+03:00', '2026-09-28T12:00:00+03:00')""")
     database = SqliteDatabase(db_path)
     await database.initialize()
     restored = await SqliteAnalysisJobRepository(database).get("old")
     assert restored is not None
     assert restored.name == "История"
-    assert restored.methodology.version == "hh-browser-complete-count-v1"
+    assert restored.methodology.version == "hh-browser-per-role-v2"
     assert restored.scope.vacancy_slices == restored.scope.resume_slices == ()
+    previous_browser_job = await SqliteAnalysisJobRepository(database).get("browser-v1")
+    assert previous_browser_job is not None
+    assert previous_browser_job.methodology.version == "hh-browser-per-role-v2"
 
 
 async def test_initialize_preserves_existing_api_rate_profile(tmp_path) -> None:

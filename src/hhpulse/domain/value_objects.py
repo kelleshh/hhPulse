@@ -80,7 +80,7 @@ class DailySchedule:
 
 @dataclass(frozen=True, slots=True)
 class Methodology:
-    version: str = "hh-browser-complete-count-v1"
+    version: str = "hh-browser-per-role-v2"
     active_resume_window_days: int = 60
 
     def __post_init__(self) -> None:

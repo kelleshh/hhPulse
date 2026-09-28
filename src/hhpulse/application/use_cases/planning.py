@@ -27,7 +27,7 @@ class CrawlPlan:
 
 
 class BuildDailyCrawlPlan:
-    """One vacancy tree per slice, one full resume count per role and slice."""
+    """One search URL per role, target, region, experience, and selected slice."""
 
     def __init__(self, source: MarketSource, *, random_source: random.Random | None = None) -> None:
         self._source = source
@@ -40,38 +40,20 @@ class BuildDailyCrawlPlan:
             EXPERIENCE_STRATA if job.scope.include_experience_strata else (ExperienceBand.ANY,)
         )
         queries = tuple(
-            query
+            SearchQuery(target, observation_date, region_id, role.id, experience, filters)
             for region_id in sorted(job.scope.region_ids)
             for experience in experience_bands
-            for query in (
-                SearchQuery(SearchTarget.VACANCY, observation_date, region_id, "*", experience),
+            for role in roles
+            for target, slices in (
+                (SearchTarget.VACANCY, job.scope.vacancy_slices),
+                (SearchTarget.RESUME, job.scope.resume_slices),
+            )
+            for filters in (
+                (),
                 *(
-                    SearchQuery(
-                        SearchTarget.VACANCY, observation_date, region_id, "*", experience, (flt,)
-                    )
-                    for flt in selected_filters(SearchTarget.VACANCY, job.scope.vacancy_slices)
+                    (flt,)
+                    for flt in selected_filters(target, slices)
                     if region_id != "remote" or flt.key != "work_format"
-                ),
-                *(
-                    SearchQuery(
-                        SearchTarget.RESUME,
-                        observation_date,
-                        region_id,
-                        role.id,
-                        experience,
-                        filters,
-                    )
-                    for role in roles
-                    for filters in (
-                        (),
-                        *(
-                            (flt,)
-                            for flt in selected_filters(
-                                SearchTarget.RESUME, job.scope.resume_slices
-                            )
-                            if region_id != "remote" or flt.key != "work_format"
-                        ),
-                    )
                 ),
             )
         )

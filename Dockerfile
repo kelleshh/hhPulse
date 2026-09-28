@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1.7
-
 ARG PYTHON_IMAGE=python:3.12-slim-bookworm
 
 FROM ${PYTHON_IMAGE} AS builder

@@ -61,12 +61,12 @@ async def test_all_roles_are_discovered_instead_of_hardcoded() -> None:
     )
 
     assert {role.id for role in plan.roles} == {"96", "160"}
-    assert len(plan.queries) == 15  # five vacancy trees and ten role-specific resume searches
-    assert sum(query.target is SearchTarget.VACANCY for query in plan.queries) == 5
+    assert len(plan.queries) == 20  # two roles, five experience bands, two search targets
+    assert sum(query.target is SearchTarget.VACANCY for query in plan.queries) == 10
     assert sum(query.target is SearchTarget.RESUME for query in plan.queries) == 10
     assert {
         query.professional_role_id for query in plan.queries if query.target is SearchTarget.VACANCY
-    } == {"*"}
+    } == {"96", "160"}
 
 
 async def test_selected_role_reduces_plan_without_changing_discovery_contract() -> None:
@@ -80,7 +80,7 @@ async def test_selected_role_reduces_plan_without_changing_discovery_contract() 
     assert [query.target for query in plan.queries] == [SearchTarget.VACANCY, SearchTarget.RESUME]
 
 
-async def test_selected_slices_add_exact_search_loads_without_multiplying_vacancies_by_roles():
+async def test_selected_slices_add_exact_search_loads_for_each_role():
     original = _job(all_roles=False, include_experience=False)
     from dataclasses import replace
 
@@ -95,3 +95,16 @@ async def test_selected_slices_add_exact_search_loads_without_multiplying_vacanc
     assert sum(query.target is SearchTarget.VACANCY for query in plan.queries) == 7
     assert sum(query.target is SearchTarget.RESUME for query in plan.queries) == 10
     assert len(plan.queries) == len(set(plan.queries)) == 17
+
+
+async def test_all_roles_multiply_both_vacancy_and_resume_slices():
+    from dataclasses import replace
+
+    original = _job(all_roles=True, include_experience=False)
+    scope = replace(original.scope, vacancy_slices=("work_format",), resume_slices=("education",))
+    plan = await BuildDailyCrawlPlan(FakeMarketSource()).execute(
+        replace(original, scope=scope), observation_date=date(2026, 9, 17)
+    )
+    assert sum(query.target is SearchTarget.VACANCY for query in plan.queries) == 12
+    assert sum(query.target is SearchTarget.RESUME for query in plan.queries) == 18
+    assert len(plan.queries) == len(set(plan.queries)) == 30

@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1.7
-
 ARG NODE_IMAGE=node:24-alpine
 ARG NGINX_IMAGE=nginxinc/nginx-unprivileged:1.27-alpine
 

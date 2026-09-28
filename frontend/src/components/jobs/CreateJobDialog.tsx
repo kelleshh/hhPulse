@@ -39,9 +39,9 @@ export function CreateJobDialog({ open, onClose }: CreateJobDialogProps) {
       : { salary_present: 1, work_format: remote ? 0 : 5, employment: 5, education: 8 };
     return 1 + names.reduce((sum, name) => sum + (options[name] ?? 0), 0);
   };
-  const vacancyLoads = form.regionIds.reduce((sum, region) => sum + strata * cost(form.vacancySlices, "vacancy", region === "remote"), 0);
+  const vacancyLoads = roleCount == null ? null : form.regionIds.reduce((sum, region) => sum + strata * roleCount * cost(form.vacancySlices, "vacancy", region === "remote"), 0);
   const resumeLoads = roleCount == null ? null : form.regionIds.reduce((sum, region) => sum + strata * roleCount * cost(form.resumeSlices, "resume", region === "remote"), 0);
-  const loads = resumeLoads == null ? null : vacancyLoads + resumeLoads;
+  const loads = vacancyLoads == null || resumeLoads == null ? null : vacancyLoads + resumeLoads;
   const toggleSlice = (target: "vacancySlices" | "resumeSlices", name: string) => setForm((current) => ({
     ...current,
     [target]: current[target].includes(name)
@@ -97,8 +97,8 @@ export function CreateJobDialog({ open, onClose }: CreateJobDialogProps) {
 
         <section>
           <h3>Нагрузка на HH</h3>
-          <p className="form-note">Поисковых загрузок: вакансии {vacancyLoads}, резюме {resumeLoads ?? "ожидаем справочник профессий"}, всего {loads ?? "—"}.</p>
-          <p className="form-note">Оценка времени: {loads == null ? "—" : `${Math.ceil(loads * 3 / 60)}–${Math.ceil(loads * 12 / 60)} мин`}. Реальная скорость зависит от загрузки HH и раскрытия дерева. Это число страниц поиска, а не всех HTTP-запросов Chrome.</p>
+          <p className="form-note">Поисковых загрузок: вакансии {vacancyLoads ?? "ожидаем справочник профессий"}, резюме {resumeLoads ?? "ожидаем справочник профессий"}, всего {loads ?? "—"}.</p>
+          <p className="form-note">Оценка времени: {loads == null ? "—" : `${Math.ceil(loads * 3 / 60)}–${Math.ceil(loads * 12 / 60)} мин`}. Реальная скорость зависит от загрузки HH. Это число страниц поиска, а не всех HTTP-запросов Chrome.</p>
           <input type="hidden" value={form.userAgentMode} />
           <p className="form-note">Нужна открытая вкладка расширения hhPulse в авторизованном Chrome. Один поиск за раз, пауза 2–4 секунды. При ограничении доступа сбор останавливается.</p>
         </section>
