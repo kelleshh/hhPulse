@@ -19,6 +19,8 @@ CREATE TABLE IF NOT EXISTS analysis_jobs (
     role_selection_mode TEXT NOT NULL,
     role_ids_json TEXT NOT NULL,
     include_experience_strata INTEGER NOT NULL,
+    vacancy_slices_json TEXT NOT NULL DEFAULT '[]',
+    resume_slices_json TEXT NOT NULL DEFAULT '[]',
     max_concurrency INTEGER NOT NULL,
     max_rps REAL NOT NULL,
     user_agent_mode TEXT NOT NULL,
@@ -55,6 +57,9 @@ CREATE TABLE IF NOT EXISTS crawl_units (
     attempts INTEGER NOT NULL,
     updated_at TEXT,
     last_error TEXT,
+    retry_at TEXT,
+    worker_id TEXT,
+    plan_position INTEGER NOT NULL,
     UNIQUE(run_id, query_json)
 );
 
@@ -78,6 +83,24 @@ CREATE TABLE IF NOT EXISTS search_observations (
 
 CREATE INDEX IF NOT EXISTS idx_search_observations_run
     ON search_observations(run_id);
+
+CREATE TABLE IF NOT EXISTS crawl_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id TEXT NOT NULL REFERENCES crawl_runs(id) ON DELETE CASCADE,
+    unit_id TEXT,
+    occurred_at TEXT NOT NULL,
+    level TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    message TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_crawl_events_run_id
+    ON crawl_events(run_id, id DESC);
+
+CREATE TABLE IF NOT EXISTS resolved_alerts (
+    alert_id TEXT PRIMARY KEY,
+    resolved_at TEXT NOT NULL
+);
 """
 
 
@@ -95,6 +118,59 @@ class SqliteDatabase:
     def _initialize_sync(self) -> None:
         with self._connect() as connection:
             connection.executescript(_SCHEMA)
+            self._migrate(connection)
+
+    @staticmethod
+    def _migrate(connection: sqlite3.Connection) -> None:
+        job_columns = {
+            str(row["name"]) for row in connection.execute("PRAGMA table_info(analysis_jobs)")
+        }
+        for name in ("vacancy_slices_json", "resume_slices_json"):
+            if name not in job_columns:
+                connection.execute(
+                    f"ALTER TABLE analysis_jobs ADD COLUMN {name} TEXT NOT NULL DEFAULT '[]'"
+                )
+        connection.execute(
+            "UPDATE analysis_jobs SET methodology_version = ? "
+            "WHERE methodology_version = 'hh-api-vacancy-daily-v2'",
+            ("hh-browser-complete-count-v1",),
+        )
+        columns = {
+            str(row["name"])
+            for row in connection.execute("PRAGMA table_info(crawl_units)").fetchall()
+        }
+        if "retry_at" not in columns:
+            connection.execute("ALTER TABLE crawl_units ADD COLUMN retry_at TEXT")
+        if "worker_id" not in columns:
+            connection.execute("ALTER TABLE crawl_units ADD COLUMN worker_id TEXT")
+        if "plan_position" not in columns:
+            connection.execute(
+                "ALTER TABLE crawl_units ADD COLUMN plan_position INTEGER NOT NULL DEFAULT 0"
+            )
+            connection.execute(
+                """
+                WITH ranked AS (
+                    SELECT id, ROW_NUMBER() OVER (PARTITION BY run_id ORDER BY id) - 1 AS position
+                    FROM crawl_units
+                )
+                UPDATE crawl_units
+                SET plan_position = (
+                    SELECT position FROM ranked WHERE ranked.id = crawl_units.id
+                )
+                """
+            )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_crawl_units_ready
+            ON crawl_units(run_id, status, retry_at)
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_crawl_units_plan
+            ON crawl_units(run_id, plan_position, status, retry_at)
+            """
+        )
 
     async def read(self, operation: Callable[[sqlite3.Connection], T]) -> T:
         return await asyncio.to_thread(self._run_sync, operation)

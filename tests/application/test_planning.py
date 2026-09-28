@@ -1,3 +1,4 @@
+import random
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
@@ -25,6 +26,9 @@ class FakeMarketSource:
             ProfessionalRole(id="160", name="DevOps-инженер"),
         )
 
+    async def probe(self, *, region_id: str) -> None:
+        raise AssertionError("not used by planning")
+
 
 def _job(*, all_roles: bool, include_experience: bool = True) -> AnalysisJob:
     now = datetime(2026, 9, 17, 12, 0, tzinfo=ZoneInfo("Europe/Moscow"))
@@ -48,15 +52,21 @@ def _job(*, all_roles: bool, include_experience: bool = True) -> AnalysisJob:
 
 
 async def test_all_roles_are_discovered_instead_of_hardcoded() -> None:
-    plan = await BuildDailyCrawlPlan(FakeMarketSource()).execute(
+    plan = await BuildDailyCrawlPlan(
+        FakeMarketSource(),
+        random_source=random.Random(42),
+    ).execute(
         _job(all_roles=True),
         observation_date=date(2026, 9, 17),
     )
 
     assert {role.id for role in plan.roles} == {"96", "160"}
-    # 2 roles * 5 experience strata * 2 sides (vacancy/resume)
-    assert len(plan.queries) == 20
-    assert {query.target for query in plan.queries} == {SearchTarget.VACANCY, SearchTarget.RESUME}
+    assert len(plan.queries) == 15  # five vacancy trees and ten role-specific resume searches
+    assert sum(query.target is SearchTarget.VACANCY for query in plan.queries) == 5
+    assert sum(query.target is SearchTarget.RESUME for query in plan.queries) == 10
+    assert {
+        query.professional_role_id for query in plan.queries if query.target is SearchTarget.VACANCY
+    } == {"*"}
 
 
 async def test_selected_role_reduces_plan_without_changing_discovery_contract() -> None:
@@ -67,3 +77,21 @@ async def test_selected_role_reduces_plan_without_changing_discovery_contract() 
 
     assert [role.id for role in plan.roles] == ["160"]
     assert len(plan.queries) == 2
+    assert [query.target for query in plan.queries] == [SearchTarget.VACANCY, SearchTarget.RESUME]
+
+
+async def test_selected_slices_add_exact_search_loads_without_multiplying_vacancies_by_roles():
+    original = _job(all_roles=False, include_experience=False)
+    from dataclasses import replace
+
+    scope = replace(
+        original.scope,
+        vacancy_slices=("low_responses", "work_format"),
+        resume_slices=("salary_present", "education"),
+    )
+    plan = await BuildDailyCrawlPlan(FakeMarketSource()).execute(
+        replace(original, scope=scope), observation_date=date(2026, 9, 17)
+    )
+    assert sum(query.target is SearchTarget.VACANCY for query in plan.queries) == 7
+    assert sum(query.target is SearchTarget.RESUME for query in plan.queries) == 10
+    assert len(plan.queries) == len(set(plan.queries)) == 17

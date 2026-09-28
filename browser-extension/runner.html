@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>hhPulse · Chrome</title>
+<style>body{font:16px system-ui;max-width:720px;margin:3rem auto;line-height:1.5;color:#1a2635}label{display:block;margin:1rem 0}input{padding:.6rem;width:100%;box-sizing:border-box}button{padding:.7rem 1.2rem;cursor:pointer}#status{white-space:pre-wrap;background:#f2f5f7;padding:1rem;border-radius:.5rem}</style>
+</head><body><h1>hhPulse · сбор в Chrome</h1>
+<p>Оставьте эту вкладку открытой. Поиск выполняется последовательно в одной отдельной вкладке HH. Остановить сбор можно закрытием этой вкладки.</p>
+<label>Адрес локального hhPulse<input id="server" value="http://localhost:3000" autocomplete="off"></label>
+<label>Токен из <code>./deploy.sh browser-token</code><input id="token" type="password" autocomplete="off"></label>
+<button id="start">Подключить</button><button id="stop" disabled>Остановить</button>
+<p id="status" role="status">Не подключено</p><script src="runner.js"></script></body></html>

@@ -3,7 +3,13 @@ from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from hhpulse.domain.entities import AnalysisJob, AnalysisScope, CrawlRun, CrawlUnit
-from hhpulse.domain.enums import RoleSelectionMode, SearchTarget, UserAgentMode
+from hhpulse.domain.enums import (
+    RoleSelectionMode,
+    RunStatus,
+    RunUnitStatus,
+    SearchTarget,
+    UserAgentMode,
+)
 from hhpulse.domain.value_objects import (
     DailySchedule,
     FacetGroup,
@@ -17,23 +23,121 @@ from hhpulse.domain.value_objects import (
 from hhpulse.infrastructure.persistence.database import SqliteDatabase
 from hhpulse.infrastructure.persistence.repositories import (
     SqliteAnalysisJobRepository,
-    SqliteCrawlRunRepository,
-    SqliteCrawlUnitRepository,
-    SqliteObservationRepository,
+    SqliteCrawlExecutionRepository,
 )
 
 
-async def test_staging_is_not_visible_as_published_until_whole_run_succeeds(tmp_path) -> None:
+async def test_completion_and_whole_run_publish_are_atomic(tmp_path) -> None:
     path = tmp_path / "hhpulse.sqlite3"
     database = SqliteDatabase(path)
     await database.initialize()
     jobs = SqliteAnalysisJobRepository(database)
-    runs = SqliteCrawlRunRepository(database)
-    units = SqliteCrawlUnitRepository(database)
-    observations = SqliteObservationRepository(database)
+    executions = SqliteCrawlExecutionRepository(database)
     now = datetime(2026, 9, 17, 12, 0, tzinfo=ZoneInfo("Europe/Moscow"))
+    job = _job(now)
+    await jobs.add(job)
+    planned = await executions.get_or_create(
+        CrawlRun(id="run-1", job_id=job.id, observation_date=date(2026, 9, 17))
+    )
+    query = SearchQuery(
+        target=SearchTarget.VACANCY,
+        observation_date=planned.observation_date,
+        region_id="1",
+        professional_role_id="96",
+    )
+    await executions.initialize(
+        planned.start(total_units=1, at=now),
+        (CrawlUnit(id="unit-1", run_id=planned.id, query=query),),
+    )
+    claimed = await executions.claim_next_ready(
+        planned.id,
+        worker_id="worker-1",
+        at=now,
+    )
+    assert claimed is not None
+    completed = await executions.complete_unit(
+        claimed.id,
+        SearchObservation(query=query, page=_page()),
+        at=now,
+    )
 
-    job = AnalysisJob(
+    assert completed.completed_units == 1
+    with sqlite3.connect(path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM search_observations").fetchone()[0] == 0
+        assert (
+            connection.execute("SELECT COUNT(*) FROM staged_search_observations").fetchone()[0] == 1
+        )
+
+    published = await executions.publish_completed(planned.id, at=now)
+
+    assert published.status is RunStatus.SUCCEEDED
+    with sqlite3.connect(path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM search_observations").fetchone()[0] == 1
+        assert (
+            connection.execute("SELECT COUNT(*) FROM staged_search_observations").fetchone()[0] == 0
+        )
+
+
+async def test_manual_parser_recovery_preserves_completed_checkpoint(tmp_path) -> None:
+    path = tmp_path / "hhpulse.sqlite3"
+    database = SqliteDatabase(path)
+    await database.initialize()
+    jobs = SqliteAnalysisJobRepository(database)
+    executions = SqliteCrawlExecutionRepository(database)
+    now = datetime(2026, 9, 18, 12, 0, tzinfo=ZoneInfo("Europe/Moscow"))
+    job = _job(now)
+    await jobs.add(job)
+    planned = await executions.get_or_create(
+        CrawlRun(id="run-recovery", job_id=job.id, observation_date=date(2026, 9, 18))
+    )
+    queries = tuple(
+        SearchQuery(
+            target=SearchTarget.VACANCY,
+            observation_date=planned.observation_date,
+            region_id="1",
+            professional_role_id=str(role_id),
+        )
+        for role_id in (84, 96)
+    )
+    await executions.initialize(
+        planned.start(total_units=2, at=now),
+        tuple(
+            CrawlUnit(id=f"unit-{index}", run_id=planned.id, query=query)
+            for index, query in enumerate(queries)
+        ),
+    )
+    claimed = await executions.claim_next_ready(
+        planned.id,
+        worker_id="worker-1",
+        at=now,
+    )
+    assert claimed is not None
+    await executions.complete_unit(
+        claimed.id,
+        SearchObservation(query=claimed.query, page=_page()),
+        at=now,
+    )
+    await executions.abort_parser(
+        planned.id,
+        message="zero result was not recognized",
+        at=now,
+    )
+
+    reopened = await executions.reopen_parser_broken(planned.id, at=now)
+    units = await executions.list_units(planned.id)
+
+    assert reopened.status is RunStatus.RUNNING
+    assert reopened.completed_units == 1
+    assert [unit.status for unit in units].count(RunUnitStatus.SUCCEEDED) == 1
+    assert [unit.status for unit in units].count(RunUnitStatus.PENDING) == 1
+    with sqlite3.connect(path) as connection:
+        assert (
+            connection.execute("SELECT COUNT(*) FROM staged_search_observations").fetchone()[0] == 1
+        )
+
+
+def _job(now: datetime) -> AnalysisJob:
+    return AnalysisJob(
         id="job-1",
         name="Москва",
         scope=AnalysisScope(region_ids=("1",), role_selection_mode=RoleSelectionMode.ALL),
@@ -45,21 +149,10 @@ async def test_staging_is_not_visible_as_published_until_whole_run_succeeds(tmp_
         created_at=now,
         updated_at=now,
     )
-    await jobs.add(job)
-    run = CrawlRun(id="run-1", job_id=job.id, observation_date=date(2026, 9, 17)).start(
-        total_units=1,
-        at=now,
-    )
-    await runs.add(run)
-    query = SearchQuery(
-        target=SearchTarget.VACANCY,
-        observation_date=date(2026, 9, 17),
-        region_id="1",
-        professional_role_id="96",
-    )
-    unit = CrawlUnit(id="unit-1", run_id=run.id, query=query).start_attempt(at=now)
-    await units.add_many((unit,))
-    page = ParsedSearchPage(
+
+
+def _page() -> ParsedSearchPage:
+    return ParsedSearchPage(
         total_count=123,
         facets=(
             FacetGroup(
@@ -74,30 +167,3 @@ async def test_staging_is_not_visible_as_published_until_whole_run_succeeds(tmp_
             ),
         ),
     )
-    await observations.stage(run.id, unit.id, SearchObservation(query=query, page=page))
-
-    with sqlite3.connect(path) as connection:
-        published_count = connection.execute(
-            "SELECT COUNT(*) FROM search_observations"
-        ).fetchone()[0]
-        staged_count = connection.execute(
-            "SELECT COUNT(*) FROM staged_search_observations"
-        ).fetchone()[0]
-        assert published_count == 0
-        assert staged_count == 1
-
-    unit = unit.succeed(at=now)
-    await units.update(unit)
-    run = run.mark_unit_completed().succeed(at=now)
-    await runs.update(run)
-    await observations.publish_run(run.id)
-
-    with sqlite3.connect(path) as connection:
-        published_count = connection.execute(
-            "SELECT COUNT(*) FROM search_observations"
-        ).fetchone()[0]
-        staged_count = connection.execute(
-            "SELECT COUNT(*) FROM staged_search_observations"
-        ).fetchone()[0]
-        assert published_count == 1
-        assert staged_count == 0

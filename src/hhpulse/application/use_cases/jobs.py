@@ -24,6 +24,8 @@ class CreateAnalysisJob:
                 role_selection_mode=command.role_selection_mode,
                 role_ids=command.role_ids,
                 include_experience_strata=command.include_experience_strata,
+                vacancy_slices=command.vacancy_slices,
+                resume_slices=command.resume_slices,
             ),
             rate_limit=RateLimitPolicy(
                 max_concurrency=command.max_concurrency,
@@ -68,3 +70,11 @@ class SetAnalysisJobEnabled:
         updated = job.set_enabled(enabled, at=self._clock.now())
         await self._repository.update(updated)
         return updated
+
+
+class DeleteAnalysisJob:
+    def __init__(self, repository: AnalysisJobRepository) -> None:
+        self._repository = repository
+
+    async def execute(self, job_id: str) -> bool:
+        return await self._repository.delete(job_id)

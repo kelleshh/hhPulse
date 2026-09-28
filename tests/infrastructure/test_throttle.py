@@ -15,3 +15,11 @@ def test_429_only_slows_down_and_successes_gradually_recover() -> None:
     assert throttle.snapshot().multiplier == 2.0
     throttle.on_success()
     assert throttle.snapshot().multiplier == 1.0
+
+
+def test_delay_is_deterministic_from_configured_rps() -> None:
+    throttle = AdaptiveThrottle(RateLimitPolicy(max_concurrency=1, max_rps=0.5))
+
+    assert throttle.next_delay_seconds() == 2.0
+    throttle.on_throttled()
+    assert throttle.next_delay_seconds() == 4.0

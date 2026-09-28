@@ -16,4 +16,6 @@ class CreateAnalysisJobCommand:
     user_agent_mode: UserAgentMode
     timezone: str = "Europe/Moscow"
     enabled: bool = True
-    include_experience_strata: bool = True
+    include_experience_strata: bool = False
+    vacancy_slices: tuple[str, ...] = ()
+    resume_slices: tuple[str, ...] = ()

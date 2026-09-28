@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from hhpulse.api.dependencies import get_container
 from hhpulse.api.schemas import CreateJobRequest, JobResponse, SetJobEnabledRequest
 from hhpulse.application.dto import CreateAnalysisJobCommand
 from hhpulse.application.use_cases.jobs import (
     CreateAnalysisJob,
+    DeleteAnalysisJob,
     GetAnalysisJob,
     ListAnalysisJobs,
     SetAnalysisJobEnabled,
@@ -15,12 +18,13 @@ from hhpulse.bootstrap import Container
 from hhpulse.domain.errors import DomainError
 
 router = APIRouter(prefix="/api/v1/jobs", tags=["jobs"])
+ContainerDependency = Annotated[Container, Depends(get_container)]
 
 
 @router.post("", response_model=JobResponse, status_code=status.HTTP_201_CREATED)
 async def create_job(
     request: CreateJobRequest,
-    container: Container = Depends(get_container),
+    container: ContainerDependency,
 ) -> JobResponse:
     use_case = CreateAnalysisJob(container.jobs, container.clock)
     command = CreateAnalysisJobCommand(
@@ -34,6 +38,8 @@ async def create_job(
         timezone=request.timezone,
         enabled=request.enabled,
         include_experience_strata=request.include_experience_strata,
+        vacancy_slices=tuple(request.vacancy_slices),
+        resume_slices=tuple(request.resume_slices),
     )
     try:
         job = await use_case.execute(command)
@@ -43,7 +49,7 @@ async def create_job(
 
 
 @router.get("", response_model=list[JobResponse])
-async def list_jobs(container: Container = Depends(get_container)) -> list[JobResponse]:
+async def list_jobs(container: ContainerDependency) -> list[JobResponse]:
     jobs = await ListAnalysisJobs(container.jobs).execute()
     return [JobResponse.from_domain(job) for job in jobs]
 
@@ -51,7 +57,7 @@ async def list_jobs(container: Container = Depends(get_container)) -> list[JobRe
 @router.get("/{job_id}", response_model=JobResponse)
 async def get_job(
     job_id: str,
-    container: Container = Depends(get_container),
+    container: ContainerDependency,
 ) -> JobResponse:
     job = await GetAnalysisJob(container.jobs).execute(job_id)
     if job is None:
@@ -63,7 +69,7 @@ async def get_job(
 async def set_job_enabled(
     job_id: str,
     request: SetJobEnabledRequest,
-    container: Container = Depends(get_container),
+    container: ContainerDependency,
 ) -> JobResponse:
     job = await SetAnalysisJobEnabled(container.jobs, container.clock).execute(
         job_id,
@@ -72,3 +78,19 @@ async def set_job_enabled(
     if job is None:
         raise HTTPException(status_code=404, detail="analysis job not found")
     return JobResponse.from_domain(job)
+
+
+@router.delete(
+    "/{job_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+async def delete_job(job_id: str, container: ContainerDependency) -> Response:
+    if await container.jobs.get(job_id) is None:
+        raise HTTPException(status_code=404, detail="analysis job not found")
+    if container.scheduler is not None:
+        await container.scheduler.cancel(job_id)
+    deleted = await DeleteAnalysisJob(container.jobs).execute(job_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="analysis job not found")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -3,8 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import date, datetime
 
-from hhpulse.domain.enums import RoleSelectionMode, RunStatus, RunUnitStatus, UserAgentMode
+from hhpulse.domain.enums import (
+    RoleSelectionMode,
+    RunStatus,
+    RunUnitStatus,
+    SearchTarget,
+    UserAgentMode,
+)
 from hhpulse.domain.errors import DomainError, InvalidStateTransition
+from hhpulse.domain.slices import selected_filters
 from hhpulse.domain.value_objects import (
     DailySchedule,
     Methodology,
@@ -19,13 +26,26 @@ class AnalysisScope:
     region_ids: tuple[str, ...]
     role_selection_mode: RoleSelectionMode
     role_ids: tuple[str, ...] = ()
-    include_experience_strata: bool = True
+    include_experience_strata: bool = False
+    vacancy_slices: tuple[str, ...] = ()
+    resume_slices: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         regions = unique_strings(self.region_ids, field_name="region_ids")
         roles = unique_strings(self.role_ids, field_name="role_ids")
         object.__setattr__(self, "region_ids", regions)
         object.__setattr__(self, "role_ids", roles)
+        object.__setattr__(
+            self, "vacancy_slices", unique_strings(self.vacancy_slices, field_name="vacancy_slices")
+        )
+        object.__setattr__(
+            self, "resume_slices", unique_strings(self.resume_slices, field_name="resume_slices")
+        )
+        try:
+            selected_filters(SearchTarget.VACANCY, self.vacancy_slices)
+            selected_filters(SearchTarget.RESUME, self.resume_slices)
+        except ValueError as exc:
+            raise DomainError(str(exc)) from exc
 
         if not regions:
             raise DomainError("analysis scope must contain at least one region")
@@ -116,7 +136,11 @@ class CrawlRun:
         return replace(self, status=RunStatus.RUNNING)
 
     def parser_broken(self, *, message: str, at: datetime) -> CrawlRun:
-        if self.status not in {RunStatus.RUNNING, RunStatus.WAITING_SOURCE}:
+        if self.status not in {
+            RunStatus.PLANNED,
+            RunStatus.RUNNING,
+            RunStatus.WAITING_SOURCE,
+        }:
             raise InvalidStateTransition(f"cannot break parser from {self.status}")
         return replace(
             self,
@@ -124,6 +148,18 @@ class CrawlRun:
             finished_at=at,
             error_code="PARSER_CONTRACT_BROKEN",
             error_message=message,
+        )
+
+    def reopen_after_parser_fix(self) -> CrawlRun:
+        if self.status is not RunStatus.PARSER_BROKEN:
+            raise InvalidStateTransition(f"cannot reopen parser run from {self.status}")
+        next_status = RunStatus.RUNNING if self.total_units > 0 else RunStatus.PLANNED
+        return replace(
+            self,
+            status=next_status,
+            finished_at=None,
+            error_code=None,
+            error_message=None,
         )
 
     def fail(self, *, code: str, message: str, at: datetime) -> CrawlRun:
@@ -144,7 +180,11 @@ class CrawlRun:
         )
 
     def expire(self, *, at: datetime) -> CrawlRun:
-        if self.status not in {RunStatus.RUNNING, RunStatus.WAITING_SOURCE}:
+        if self.status not in {
+            RunStatus.PLANNED,
+            RunStatus.RUNNING,
+            RunStatus.WAITING_SOURCE,
+        }:
             raise InvalidStateTransition(f"cannot expire run from {self.status}")
         return replace(
             self,
@@ -171,6 +211,8 @@ class CrawlUnit:
     attempts: int = 0
     updated_at: datetime | None = None
     last_error: str | None = None
+    retry_at: datetime | None = None
+    worker_id: str | None = None
 
     def __post_init__(self) -> None:
         if not self.id.strip() or not self.run_id.strip():
@@ -181,28 +223,56 @@ class CrawlUnit:
     def start_attempt(self, *, at: datetime) -> CrawlUnit:
         if self.status not in {RunUnitStatus.PENDING, RunUnitStatus.WAITING_RETRY}:
             raise InvalidStateTransition(f"cannot start crawl unit from {self.status}")
+        if self.retry_at is not None and at < self.retry_at:
+            raise InvalidStateTransition("crawl unit retry time has not arrived")
         return replace(
             self,
             status=RunUnitStatus.RUNNING,
             attempts=self.attempts + 1,
             updated_at=at,
             last_error=None,
+            retry_at=None,
         )
 
-    def wait_retry(self, *, error: str, at: datetime) -> CrawlUnit:
+    def claim(self, *, worker_id: str, at: datetime) -> CrawlUnit:
+        if not worker_id.strip():
+            raise DomainError("worker id must not be empty")
+        return replace(self.start_attempt(at=at), worker_id=worker_id)
+
+    def wait_retry(self, *, error: str, retry_at: datetime, at: datetime) -> CrawlUnit:
         if self.status is not RunUnitStatus.RUNNING:
             raise InvalidStateTransition(f"cannot wait retry from {self.status}")
+        if retry_at < at:
+            raise DomainError("retry_at must not be before updated_at")
         return replace(
             self,
             status=RunUnitStatus.WAITING_RETRY,
             updated_at=at,
             last_error=error,
+            retry_at=retry_at,
+            worker_id=None,
+        )
+
+    def recover_interrupted(self, *, at: datetime) -> CrawlUnit:
+        if self.status is not RunUnitStatus.RUNNING:
+            raise InvalidStateTransition(f"cannot recover crawl unit from {self.status}")
+        return self.wait_retry(
+            error="worker process stopped before completing the request",
+            retry_at=at,
+            at=at,
         )
 
     def succeed(self, *, at: datetime) -> CrawlUnit:
         if self.status is not RunUnitStatus.RUNNING:
             raise InvalidStateTransition(f"cannot succeed crawl unit from {self.status}")
-        return replace(self, status=RunUnitStatus.SUCCEEDED, updated_at=at, last_error=None)
+        return replace(
+            self,
+            status=RunUnitStatus.SUCCEEDED,
+            updated_at=at,
+            last_error=None,
+            retry_at=None,
+            worker_id=None,
+        )
 
     def fail(self, *, error: str, at: datetime) -> CrawlUnit:
         if self.status not in {RunUnitStatus.RUNNING, RunUnitStatus.WAITING_RETRY}:
@@ -212,4 +282,30 @@ class CrawlUnit:
             status=RunUnitStatus.FAILED,
             updated_at=at,
             last_error=error,
+            retry_at=None,
+            worker_id=None,
+        )
+
+    def cancel(self, *, error: str, at: datetime) -> CrawlUnit:
+        if self.status in {RunUnitStatus.SUCCEEDED, RunUnitStatus.FAILED}:
+            raise InvalidStateTransition(f"cannot cancel crawl unit from {self.status}")
+        return replace(
+            self,
+            status=RunUnitStatus.FAILED,
+            updated_at=at,
+            last_error=error,
+            retry_at=None,
+            worker_id=None,
+        )
+
+    def requeue_after_parser_fix(self, *, at: datetime) -> CrawlUnit:
+        if self.status is not RunUnitStatus.FAILED:
+            raise InvalidStateTransition(f"cannot requeue crawl unit from {self.status}")
+        return replace(
+            self,
+            status=RunUnitStatus.PENDING,
+            updated_at=at,
+            last_error=None,
+            retry_at=None,
+            worker_id=None,
         )
