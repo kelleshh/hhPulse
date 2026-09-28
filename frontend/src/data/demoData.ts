@@ -37,11 +37,13 @@ export const DEMO_JOBS: Job[] = [
     roleSelectionMode: "all",
     roleIds: [],
     includeExperienceStrata: true,
+    vacancySlices: [],
+    resumeSlices: [],
     maxConcurrency: 2,
     maxRps: 0.8,
     userAgentMode: "shared",
     timezone: "Europe/Moscow",
-    methodologyVersion: "hh-index-daily-v1",
+    methodologyVersion: "hh-api-vacancy-daily-v2",
     activeResumeWindowDays: 60,
     enabled: true,
     createdAt: `${isoDay(45)}T09:00:00Z`,
@@ -54,11 +56,13 @@ export const DEMO_JOBS: Job[] = [
     roleSelectionMode: "selected",
     roleIds: ["96", "156", "165"],
     includeExperienceStrata: true,
+    vacancySlices: [],
+    resumeSlices: [],
     maxConcurrency: 1,
     maxRps: 0.5,
     userAgentMode: "shared",
     timezone: "Europe/Moscow",
-    methodologyVersion: "hh-index-daily-v1",
+    methodologyVersion: "hh-api-vacancy-daily-v2",
     activeResumeWindowDays: 60,
     enabled: true,
     createdAt: `${isoDay(20)}T11:30:00Z`,
@@ -82,7 +86,7 @@ export const DEMO_PROGRESS: RunProgress = {
   effectiveRps: 0.78,
   response429Count: 1,
   currentRole: "Программист, разработчик",
-  currentFilter: "Опыт 1–3 года · резюме",
+  currentFilter: "Опыт 1–3 года · вакансии",
   startedAt: `${isoDay(0)}T07:12:00Z`,
 };
 
@@ -94,6 +98,8 @@ export function metricValue(metric: MetricKey, day: number, seed: number): numbe
   if (metric === "hhIndex") return 8.2 + seed * 0.035 + wave * 18 + drift;
   if (metric === "vacancies") return Math.round(1850 + seed * 7 + wave * 900 + day * 5);
   if (metric === "resumes") return Math.round(17500 + seed * 35 + wave * 5200 + day * 28);
+  if (metric === "meanResponses") return 18 + (seed % 20) + wave * 80;
+  if (metric === "medianResponses") return 9 + (seed % 12) + wave * 40;
   if (metric === "lowResponseShare") return 0.34 + (seed % 8) * 0.018 + wave;
   if (metric === "salaryVisibleShare") return 0.48 + (seed % 7) * 0.02 - wave * 0.4;
   if (metric === "remoteShare") return 0.18 + (seed % 9) * 0.025 + wave;
@@ -179,6 +185,8 @@ export function makeSnapshot(date: string, roleId: string): SnapshotData {
     vacancies,
     resumes,
     hhIndex: resumes / vacancies,
+    meanResponses: metricValue("meanResponses", 42, seed),
+    medianResponses: metricValue("medianResponses", 42, seed),
     lowResponseShare: metricValue("lowResponseShare", 42, seed),
     salaryVisibleShare: metricValue("salaryVisibleShare", 42, seed),
     remoteShare: metricValue("remoteShare", 42, seed),
@@ -222,7 +230,7 @@ export function makeSnapshot(date: string, roleId: string): SnapshotData {
 
 export const DEMO_RUN_EVENTS: RunEvent[] = [
   { id: 3, runId: DEMO_PROGRESS.runId, unitId: "unit-3", occurredAt: new Date().toISOString(), level: "success", eventType: "unit_completed", message: "Получено 2 843: роль 96, any, vacancy, регион 1" },
-  { id: 2, runId: DEMO_PROGRESS.runId, unitId: "unit-2", occurredAt: new Date(Date.now() - 2_000).toISOString(), level: "info", eventType: "unit_started", message: "worker-2: запрос: роль 156, any, resume, регион 1" },
+  { id: 2, runId: DEMO_PROGRESS.runId, unitId: "unit-2", occurredAt: new Date(Date.now() - 2_000).toISOString(), level: "info", eventType: "unit_started", message: "worker-2: запрос: роль 156, any, vacancy, регион 1" },
   { id: 1, runId: DEMO_PROGRESS.runId, unitId: null, occurredAt: new Date(Date.now() - 60_000).toISOString(), level: "info", eventType: "run_started", message: "План сбора создан: 1940 запросов" },
 ];
 
@@ -230,7 +238,7 @@ export function makeRoleMatrix(): RoleMatrixData {
   const rows = DEMO_ROLES.map((role) => {
     const seed = roleSeed(role.id);
     const values = Object.fromEntries([
-      "hhIndex", "vacancies", "resumes", "lowResponseShare", "salaryVisibleShare",
+      "hhIndex", "vacancies", "resumes", "meanResponses", "medianResponses", "lowResponseShare", "salaryVisibleShare",
       "remoteShare", "hybridShare", "higherEducationShare", "noExperienceShare",
     ].map((metric) => [metric, metricValue(metric as MetricKey, 42, seed)])) as Record<MetricKey, number>;
     return {
@@ -242,6 +250,8 @@ export function makeRoleMatrix(): RoleMatrixData {
         hhIndex: metricValue("hhIndex", index, seed),
         vacancies: metricValue("vacancies", index, seed),
         resumes: metricValue("resumes", index, seed),
+        meanResponses: metricValue("meanResponses", index, seed),
+        medianResponses: metricValue("medianResponses", index, seed),
         lowResponseShare: metricValue("lowResponseShare", index, seed),
         salaryVisibleShare: metricValue("salaryVisibleShare", index, seed),
         remoteShare: metricValue("remoteShare", index, seed),
@@ -258,8 +268,8 @@ export const DEMO_ALERTS: AlertItem[] = [
   {
     id: "alert-parser",
     severity: "critical",
-    title: "Контракт HTML изменился",
-    description: "Сбор остановлен до публикации. Документ сохранён в карантине для проверки парсера.",
+    title: "Контракт HH API изменился",
+    description: "Сбор остановлен до публикации. JSON-ответ сохранён в карантине для проверки контракта API.",
     occurredAt: `${isoDay(5)}T08:41:00Z`,
     jobName: "Весь рынок Москвы",
     resolved: true,
@@ -276,7 +286,7 @@ export const DEMO_ALERTS: AlertItem[] = [
 ];
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  defaultMetric: "hhIndex",
+  defaultMetric: "vacancies",
   defaultViewMode: "absolute",
   defaultChartGeometry: "line-points",
   compactTables: false,

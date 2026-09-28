@@ -46,7 +46,7 @@ export class DemoRepository implements DataRepository {
     const job: Job = {
       id: crypto.randomUUID(),
       ...input,
-      methodologyVersion: "hh-index-daily-v1",
+      methodologyVersion: "hh-api-vacancy-daily-v2",
       activeResumeWindowDays: 60,
       createdAt: timestamp,
       updatedAt: timestamp,

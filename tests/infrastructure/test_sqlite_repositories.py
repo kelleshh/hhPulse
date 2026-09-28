@@ -170,7 +170,30 @@ async def test_initialize_migrates_iteration_one_crawl_unit_schema(tmp_path) -> 
     assert {"retry_at", "worker_id", "plan_position"}.issubset(columns)
 
 
-async def test_initialize_migrates_existing_jobs_to_safe_sequential_profile(tmp_path) -> None:
+async def test_existing_jobs_gain_optional_slices_without_losing_history(tmp_path) -> None:
+    db_path = tmp_path / "previous.sqlite3"
+    with sqlite3.connect(db_path) as connection:
+        connection.execute("""CREATE TABLE analysis_jobs (
+            id TEXT PRIMARY KEY, name TEXT NOT NULL, region_ids_json TEXT NOT NULL,
+            role_selection_mode TEXT NOT NULL, role_ids_json TEXT NOT NULL,
+            include_experience_strata INTEGER NOT NULL, max_concurrency INTEGER NOT NULL,
+            max_rps REAL NOT NULL, user_agent_mode TEXT NOT NULL, timezone TEXT NOT NULL,
+            methodology_version TEXT NOT NULL, active_resume_window_days INTEGER NOT NULL,
+            enabled INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)""")
+        connection.execute("""INSERT INTO analysis_jobs VALUES
+            ('old', 'История', '["1"]', 'all', '[]', 0, 2, 2.0, 'shared',
+             'Europe/Moscow', 'hh-api-vacancy-daily-v2', 60, 1,
+             '2026-09-17T12:00:00+03:00', '2026-09-17T12:00:00+03:00')""")
+    database = SqliteDatabase(db_path)
+    await database.initialize()
+    restored = await SqliteAnalysisJobRepository(database).get("old")
+    assert restored is not None
+    assert restored.name == "История"
+    assert restored.methodology.version == "hh-browser-complete-count-v1"
+    assert restored.scope.vacancy_slices == restored.scope.resume_slices == ()
+
+
+async def test_initialize_preserves_existing_api_rate_profile(tmp_path) -> None:
     db_path = tmp_path / "hhpulse.sqlite3"
     database = SqliteDatabase(db_path)
     await database.initialize()
@@ -198,9 +221,9 @@ async def test_initialize_migrates_existing_jobs_to_safe_sequential_profile(tmp_
     migrated = await SqliteAnalysisJobRepository(SqliteDatabase(db_path)).get(unsafe.id)
 
     assert migrated is not None
-    assert migrated.rate_limit == RateLimitPolicy(max_concurrency=1, max_rps=1.0)
-    assert migrated.user_agent_mode is UserAgentMode.SHARED
-    assert migrated.scope.include_experience_strata is False
+    assert migrated.rate_limit == RateLimitPolicy(max_concurrency=8, max_rps=12.0)
+    assert migrated.user_agent_mode is UserAgentMode.PER_WORKER
+    assert migrated.scope.include_experience_strata is True
 
 
 def _job(now: datetime) -> AnalysisJob:

@@ -9,7 +9,7 @@
 | `GET` | `/api/v1/analytics/overview?metric=hhIndex` | Лента дней, основной график, сводка публикаций |
 | `GET` | `/api/v1/analytics/comparison` | Ряды по ролям, метрике, опыту и диапазону дат |
 | `GET` | `/api/v1/analytics/snapshot` | Один опубликованный срез и все facet-распределения |
-| `GET` | `/api/v1/analytics/role-matrix` | Все профессии, 9 метрик, история и описательная статистика |
+| `GET` | `/api/v1/analytics/role-matrix` | Все профессии, доступные метрики, история и описательная статистика |
 | `GET` | `/api/v1/jobs/{job_id}/runs/today/events` | Живой журнал текущего сбора |
 | `GET` | `/api/v1/alerts` | События источника, парсера и планировщика |
 | `POST` | `/api/v1/alerts/{alert_id}/resolve` | Отметить событие разобранным |

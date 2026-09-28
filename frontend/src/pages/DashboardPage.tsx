@@ -12,7 +12,7 @@ import type { ChartGeometry, MetricKey, ViewMode } from "../domain/types";
 
 export function DashboardPage() {
   const navigate = useNavigate();
-  const [metric, setMetric] = useState<MetricKey>("hhIndex");
+  const [metric, setMetric] = useState<MetricKey>("vacancies");
   const [mode, setMode] = useState<ViewMode>("absolute");
   const [geometry, setGeometry] = useState<ChartGeometry>("line-points");
   const settings = useSettings();
@@ -50,7 +50,7 @@ export function DashboardPage() {
         <div><Layers3 size={19} /><span><strong>{data.rolesObserved}</strong><small>профессии в плане</small></span></div>
         <div><Activity size={19} /><span><strong>{data.observations.toLocaleString("ru-RU")}</strong><small>наблюдений в полном дне</small></span></div>
         <div><Clock3 size={19} /><span><strong>{(data.availability30d * 100).toFixed(0)}%</strong><small>дней опубликовано за месяц</small></span></div>
-        <div className="measure-strip__method"><span><strong>60 дней</strong><small>окно активности резюме</small></span></div>
+        <div className="measure-strip__method"><span><strong>HH API</strong><small>официальный источник вакансий</small></span></div>
       </section>
 
       {run ? (
@@ -81,7 +81,7 @@ export function DashboardPage() {
       <section className="analysis-panel">
         <div className="analysis-panel__heading">
           <div>
-            <h2>Динамика конкуренции</h2>
+            <h2>Динамика показателей рынка</h2>
             <p>Три выбранные профессии, последние 30 опубликованных дней.</p>
           </div>
           <div className="analysis-panel__controls">

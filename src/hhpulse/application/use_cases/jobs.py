@@ -24,6 +24,8 @@ class CreateAnalysisJob:
                 role_selection_mode=command.role_selection_mode,
                 role_ids=command.role_ids,
                 include_experience_strata=command.include_experience_strata,
+                vacancy_slices=command.vacancy_slices,
+                resume_slices=command.resume_slices,
             ),
             rate_limit=RateLimitPolicy(
                 max_concurrency=command.max_concurrency,

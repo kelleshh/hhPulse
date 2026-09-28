@@ -45,6 +45,11 @@ class SqliteAnalysisJobRepository(AnalysisJobRepository):
                 """,
                 self._to_row(job),
             )
+            connection.execute(
+                "UPDATE analysis_jobs SET vacancy_slices_json = ?, "
+                "resume_slices_json = ? WHERE id = ?",
+                (json.dumps(job.scope.vacancy_slices), json.dumps(job.scope.resume_slices), job.id),
+            )
 
         await self._database.write(operation)
 
@@ -82,6 +87,11 @@ class SqliteAnalysisJobRepository(AnalysisJobRepository):
             )
             if cursor.rowcount != 1:
                 raise KeyError(f"analysis job {job.id!r} does not exist")
+            connection.execute(
+                "UPDATE analysis_jobs SET vacancy_slices_json = ?, "
+                "resume_slices_json = ? WHERE id = ?",
+                (json.dumps(job.scope.vacancy_slices), json.dumps(job.scope.resume_slices), job.id),
+            )
 
         await self._database.write(operation)
 
@@ -127,6 +137,8 @@ class SqliteAnalysisJobRepository(AnalysisJobRepository):
                 role_selection_mode=RoleSelectionMode(str(row["role_selection_mode"])),
                 role_ids=tuple(json.loads(str(row["role_ids_json"]))),
                 include_experience_strata=bool(row["include_experience_strata"]),
+                vacancy_slices=tuple(json.loads(str(row["vacancy_slices_json"]))),
+                resume_slices=tuple(json.loads(str(row["resume_slices_json"]))),
             ),
             rate_limit=RateLimitPolicy(
                 max_concurrency=int(row["max_concurrency"]),

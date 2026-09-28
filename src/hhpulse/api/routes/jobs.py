@@ -38,6 +38,8 @@ async def create_job(
         timezone=request.timezone,
         enabled=request.enabled,
         include_experience_strata=request.include_experience_strata,
+        vacancy_slices=tuple(request.vacancy_slices),
+        resume_slices=tuple(request.resume_slices),
     )
     try:
         job = await use_case.execute(command)

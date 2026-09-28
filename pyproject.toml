@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "hhpulse"
-version = "0.3.1"
+version = "0.4.0"
 description = "Local daily HH.ru labour-market analytics engine"
 readme = "README.md"
 authors = ["hhPulse"]
@@ -12,7 +12,6 @@ packages = [{ include = "hhpulse", from = "src" }]
 
 [tool.poetry.dependencies]
 python = ">=3.12,<4.0"
-beautifulsoup4 = ">=4.12,<5"
 fastapi = ">=0.115,<0.116"
 pydantic = ">=2.10,<3"
 requests = ">=2.32,<3"
@@ -44,6 +43,9 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 "src/hhpulse/application/analytics.py" = ["RUF001"]
 "src/hhpulse/infrastructure/persistence/repositories.py" = ["RUF001"]
 "tests/infrastructure/test_hh_parser.py" = ["RUF001"]
+"src/hhpulse/infrastructure/hh/role_snapshot.py" = ["RUF001"]
+"scripts/get_hh_application_token.py" = ["RUF001"]
+"scripts/public_resume_count_probe.py" = ["RUF001"]
 
 [tool.mypy]
 python_version = "3.12"

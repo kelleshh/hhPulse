@@ -6,11 +6,16 @@ from datetime import date, datetime, time, timedelta
 from uuid import NAMESPACE_URL, uuid5
 from zoneinfo import ZoneInfo
 
-from hhpulse.application.errors import MarketSourceUnavailable, ParserContractBroken
+from hhpulse.application.errors import (
+    BrowserUnavailable,
+    MarketSourceRejected,
+    MarketSourceUnavailable,
+    ParserContractBroken,
+)
 from hhpulse.application.ports.clock import Clock
 from hhpulse.application.ports.market_source import MarketSource, MarketSourceFactory
 from hhpulse.application.ports.repositories import CrawlExecutionRepository
-from hhpulse.application.ports.runtime import HtmlQuarantine, Sleeper
+from hhpulse.application.ports.runtime import PayloadQuarantine, Sleeper
 from hhpulse.application.use_cases.planning import BuildDailyCrawlPlan
 from hhpulse.domain.entities import AnalysisJob, CrawlRun, CrawlUnit
 from hhpulse.domain.enums import RunStatus
@@ -107,7 +112,7 @@ class AbortRunOnParserContract:
     def __init__(
         self,
         executions: CrawlExecutionRepository,
-        quarantine: HtmlQuarantine,
+        quarantine: PayloadQuarantine,
         clock: Clock,
     ) -> None:
         self._executions = executions
@@ -137,13 +142,13 @@ class AbortRunOnParserContract:
         error: ParserContractBroken,
         at: datetime,
     ) -> str | None:
-        if error.raw_html is None:
+        if error.raw_payload is None:
             return None
         try:
             return await self._quarantine.save(
                 run_id=run_id,
                 unit_id=unit_id,
-                html=error.raw_html,
+                payload=error.raw_payload,
                 observed_at=at,
             )
         except Exception as quarantine_error:
@@ -154,7 +159,7 @@ class RunCrawlWorkerPool:
     def __init__(
         self,
         executions: CrawlExecutionRepository,
-        quarantine: HtmlQuarantine,
+        quarantine: PayloadQuarantine,
         clock: Clock,
         sleeper: Sleeper,
         retry_policy: RetryPolicy,
@@ -179,7 +184,8 @@ class RunCrawlWorkerPool:
     ) -> CrawlRun:
         stopped = asyncio.Event()
         async with asyncio.TaskGroup() as group:
-            for worker_index in range(job.rate_limit.max_concurrency):
+            # One Chrome tab and one search queue, including jobs stored by older versions.
+            for worker_index in range(1):
                 group.create_task(
                     self._worker(
                         run.id,
@@ -241,6 +247,10 @@ class RunCrawlWorkerPool:
         except MarketSourceUnavailable as exc:
             await self._defer(unit, exc)
             return True
+        except MarketSourceRejected as exc:
+            await self._fail_source_rejected(unit.run_id, exc)
+            stopped.set()
+            return False
         except Exception as exc:
             await self._fail_unexpected(unit.run_id, exc)
             stopped.set()
@@ -258,9 +268,12 @@ class RunCrawlWorkerPool:
 
     async def _defer(self, unit: CrawlUnit, error: MarketSourceUnavailable) -> None:
         at = self._clock.now()
-        delay = self._retry_policy.delay_seconds(
-            attempts=unit.attempts,
-            retry_after_seconds=error.retry_after_seconds,
+        delay = (
+            15.0
+            if isinstance(error, BrowserUnavailable)
+            else self._retry_policy.delay_seconds(
+                attempts=unit.attempts, retry_after_seconds=error.retry_after_seconds
+            )
         )
         try:
             await self._executions.defer_unit(
@@ -268,6 +281,17 @@ class RunCrawlWorkerPool:
                 error=str(error),
                 retry_at=at + timedelta(seconds=delay),
                 at=at,
+            )
+        except InvalidStateTransition:
+            return
+
+    async def _fail_source_rejected(self, run_id: str, error: MarketSourceRejected) -> None:
+        try:
+            await self._executions.fail_run(
+                run_id,
+                code="SOURCE_ACCESS_REJECTED",
+                message=str(error),
+                at=self._clock.now(),
             )
         except InvalidStateTransition:
             return
@@ -311,7 +335,7 @@ class ExecuteDailyCrawl:
         self,
         executions: CrawlExecutionRepository,
         source_factory: MarketSourceFactory,
-        quarantine: HtmlQuarantine,
+        quarantine: PayloadQuarantine,
         clock: Clock,
         sleeper: Sleeper,
         retry_policy: RetryPolicy,
@@ -356,6 +380,8 @@ class ExecuteDailyCrawl:
                     planning_failures += 1
                     await self._wait_for_source(exc, planning_failures, deadline)
                     continue
+                except MarketSourceRejected as exc:
+                    return await self._fail_planned_run(job, observation_date, exc)
                 except Exception as exc:
                     return await self._fail_planned_run(job, observation_date, exc)
 
@@ -379,9 +405,12 @@ class ExecuteDailyCrawl:
         attempts: int,
         deadline: datetime,
     ) -> None:
-        delay = self._retry_policy.delay_seconds(
-            attempts=attempts,
-            retry_after_seconds=error.retry_after_seconds,
+        delay = (
+            15.0
+            if isinstance(error, BrowserUnavailable)
+            else self._retry_policy.delay_seconds(
+                attempts=attempts, retry_after_seconds=error.retry_after_seconds
+            )
         )
         remaining = max(0.0, (deadline - self._clock.now()).total_seconds())
         await self._sleeper.sleep(min(delay, remaining))

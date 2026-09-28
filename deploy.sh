@@ -38,12 +38,21 @@ require_runtime() {
 }
 
 ensure_env() {
-  if [[ -f "${ENV_FILE}" ]]; then
-    return
+  if [[ ! -f "${ENV_FILE}" ]]; then
+    [[ -f "${ENV_EXAMPLE}" ]] || die "Не найден ${ENV_EXAMPLE}."
+    cp "${ENV_EXAMPLE}" "${ENV_FILE}"
+    printf 'Создан .env из безопасных локальных настроек по умолчанию.\n'
   fi
-  [[ -f "${ENV_EXAMPLE}" ]] || die "Не найден ${ENV_EXAMPLE}."
-  cp "${ENV_EXAMPLE}" "${ENV_FILE}"
-  printf 'Создан .env из безопасных локальных настроек по умолчанию.\n'
+  if [[ -z "$(read_env_value HHPULSE_BROWSER_TOKEN '')" ]]; then
+    local token
+    token="$(python3 -c 'import secrets; print(secrets.token_hex(24))')"
+    if grep -q '^HHPULSE_BROWSER_TOKEN=' "${ENV_FILE}"; then
+      sed -i "s/^HHPULSE_BROWSER_TOKEN=.*/HHPULSE_BROWSER_TOKEN=${token}/" "${ENV_FILE}"
+    else
+      printf '\nHHPULSE_BROWSER_TOKEN=%s\n' "${token}" >> "${ENV_FILE}"
+    fi
+    chmod 600 "${ENV_FILE}"
+  fi
 }
 
 service_state() {
@@ -169,6 +178,7 @@ usage() {
   ./deploy.sh stop      остановить, сохранив данные
   ./deploy.sh down      удалить контейнеры и сеть, сохранив volume с данными
   ./deploy.sh doctor    проверить Docker и Compose-конфигурацию
+  ./deploy.sh browser-token  показать токен для расширения Chrome
 EOF
 }
 
@@ -181,6 +191,12 @@ main() {
 
   require_runtime
   ensure_env
+
+  if [[ "${command}" == "browser-token" ]]; then
+    read_env_value HHPULSE_BROWSER_TOKEN ''
+    printf '\n'
+    return
+  fi
 
   case "${command}" in
     deploy) deploy ;;

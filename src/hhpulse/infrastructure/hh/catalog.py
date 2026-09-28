@@ -7,9 +7,9 @@ import requests
 
 from hhpulse.application.ports.catalog import ProfessionalRoleCatalog
 from hhpulse.domain.value_objects import ProfessionalRole
-from hhpulse.infrastructure.hh.errors import HhSourceUnavailable
+from hhpulse.infrastructure.hh.headers import api_headers
 from hhpulse.infrastructure.hh.role_catalog import HhProfessionalRoleCatalogParser
-from hhpulse.infrastructure.hh.user_agents import DEFAULT_HEADERS
+from hhpulse.infrastructure.hh.role_snapshot import ROLE_SNAPSHOT
 
 
 class HhProfessionalRoleCatalog(ProfessionalRoleCatalog):
@@ -18,9 +18,13 @@ class HhProfessionalRoleCatalog(ProfessionalRoleCatalog):
     def __init__(
         self,
         *,
+        access_token: str = "",
+        user_agent: str = "hhPulse/0.4 (configure-HHPULSE_HH_USER_AGENT)",
         timeout_seconds: float = 30.0,
         ttl: timedelta = timedelta(hours=12),
     ) -> None:
+        self._access_token = access_token
+        self._user_agent = user_agent
         self._timeout_seconds = timeout_seconds
         self._ttl = ttl
         self._parser = HhProfessionalRoleCatalogParser()
@@ -39,10 +43,14 @@ class HhProfessionalRoleCatalog(ProfessionalRoleCatalog):
                 return self._cached
             try:
                 response = await asyncio.to_thread(self._fetch)
-            except requests.RequestException as exc:
+            except requests.RequestException:
                 if self._cached:
                     return self._cached
-                raise HhSourceUnavailable(f"HH role catalog request failed: {exc}") from exc
+                self._cached = tuple(
+                    ProfessionalRole(id=role_id, name=name) for role_id, name in ROLE_SNAPSHOT
+                )
+                self._cached_at = now
+                return self._cached
 
             roles = self._parser.parse(response.text)
             self._cached = tuple(sorted(roles, key=lambda role: role.name.casefold()))
@@ -51,7 +59,9 @@ class HhProfessionalRoleCatalog(ProfessionalRoleCatalog):
 
     def _fetch(self) -> requests.Response:
         with requests.Session() as session:
-            session.headers.update(DEFAULT_HEADERS)
+            session.headers.update(
+                api_headers(access_token=self._access_token, user_agent=self._user_agent)
+            )
             response = session.get(self.URL, timeout=self._timeout_seconds)
             response.raise_for_status()
             return response

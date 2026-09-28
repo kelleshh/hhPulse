@@ -14,7 +14,7 @@ describe("JobsPage", () => {
     );
 
     expect(await screen.findByText("Весь рынок Москвы")).toBeInTheDocument();
-    expect(screen.getByText("0.8 запр./с")).toBeInTheDocument();
+    expect(screen.getAllByText("2–4 с")).toHaveLength(2);
     expect(screen.getByRole("button", { name: /Новая задача/ })).toBeEnabled();
   });
 });

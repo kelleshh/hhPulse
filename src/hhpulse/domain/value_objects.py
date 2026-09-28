@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date
@@ -34,8 +35,8 @@ class Region:
 
 @dataclass(frozen=True, slots=True)
 class RateLimitPolicy:
-    max_concurrency: int = 1
-    max_rps: float = 1.0
+    max_concurrency: int = 2
+    max_rps: float = 2.0
 
     def __post_init__(self) -> None:
         if self.max_concurrency < 1:
@@ -79,7 +80,7 @@ class DailySchedule:
 
 @dataclass(frozen=True, slots=True)
 class Methodology:
-    version: str = "hh-index-daily-v1"
+    version: str = "hh-browser-complete-count-v1"
     active_resume_window_days: int = 60
 
     def __post_init__(self) -> None:
@@ -160,9 +161,99 @@ class FacetGroup:
 
 
 @dataclass(frozen=True, slots=True)
+class ResponseCountFrequency:
+    responses: int
+    vacancies: int
+
+    def __post_init__(self) -> None:
+        if self.responses < 0:
+            raise DomainError("response count must not be negative")
+        if self.vacancies < 1:
+            raise DomainError("response histogram frequency must be positive")
+
+
+@dataclass(frozen=True, slots=True)
+class VacancyResponseStats:
+    expected_vacancies: int
+    observed_vacancies: int
+    histogram: tuple[ResponseCountFrequency, ...]
+
+    def __post_init__(self) -> None:
+        if self.expected_vacancies < 0 or self.observed_vacancies < 0:
+            raise DomainError("vacancy response-stat counts must not be negative")
+        if sum(item.vacancies for item in self.histogram) != self.observed_vacancies:
+            raise DomainError("response histogram must cover observed vacancies exactly")
+        response_values = [item.responses for item in self.histogram]
+        if response_values != sorted(response_values) or len(response_values) != len(
+            set(response_values)
+        ):
+            raise DomainError("response histogram must be sorted and contain unique counts")
+
+    @classmethod
+    def from_counts(
+        cls,
+        counts: Iterable[int],
+        *,
+        expected_vacancies: int,
+    ) -> VacancyResponseStats:
+        materialized = tuple(counts)
+        frequencies = Counter(materialized)
+        return cls(
+            expected_vacancies=expected_vacancies,
+            observed_vacancies=len(materialized),
+            histogram=tuple(
+                ResponseCountFrequency(responses=value, vacancies=frequencies[value])
+                for value in sorted(frequencies)
+            ),
+        )
+
+    @property
+    def complete(self) -> bool:
+        return self.expected_vacancies == self.observed_vacancies
+
+    @property
+    def total_responses(self) -> int:
+        return sum(item.responses * item.vacancies for item in self.histogram)
+
+    @property
+    def mean(self) -> float | None:
+        if not self.observed_vacancies:
+            return None
+        return self.total_responses / self.observed_vacancies
+
+    @property
+    def median(self) -> float | None:
+        return self.quantile(0.5)
+
+    def quantile(self, fraction: float) -> float | None:
+        if not 0.0 <= fraction <= 1.0:
+            raise DomainError("quantile fraction must be between zero and one")
+        if not self.observed_vacancies:
+            return None
+        position = (self.observed_vacancies - 1) * fraction
+        lower = int(position)
+        upper = lower if position == lower else lower + 1
+        lower_value = self._value_at(lower)
+        upper_value = self._value_at(upper)
+        if lower == upper:
+            return float(lower_value)
+        return lower_value + (upper_value - lower_value) * (position - lower)
+
+    def _value_at(self, position: int) -> int:
+        seen = 0
+        for item in self.histogram:
+            seen += item.vacancies
+            if position < seen:
+                return item.responses
+        raise DomainError("response histogram position is outside its range")
+
+
+@dataclass(frozen=True, slots=True)
 class ParsedSearchPage:
     total_count: int
     facets: tuple[FacetGroup, ...]
+    response_stats: VacancyResponseStats | None = None
+    methodology_version: str | None = None
 
     def __post_init__(self) -> None:
         if self.total_count < 0:

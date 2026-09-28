@@ -23,7 +23,16 @@
 http://localhost:3000
 ```
 
-Через неё доступны интерфейс, `/api`, `/docs`, `/openapi.json` и `/health`.
+## Chrome и локальный токен
+
+`./deploy.sh` создаёт токен расширения в `.env`. Выведите его командой
+`./deploy.sh browser-token`, загрузите папку `browser-extension` через
+`chrome://extensions` и откройте вкладку расширения. Введите там адрес сайта и
+токен. Chrome должен быть авторизован на HH под аккаунтом работодателя.
+Регистрация приложения HH не требуется. Вкладка расширения должна оставаться
+открытой во время ежедневного сбора.
+
+Через локальный адрес доступны интерфейс, `/api`, `/docs`, `/openapi.json` и `/health`.
 Порт API в хостовую систему не публикуется.
 
 ## Служебные команды
@@ -36,6 +45,7 @@ http://localhost:3000
 ./deploy.sh down
 ./deploy.sh doctor
 ./deploy.sh update
+./deploy.sh browser-token
 ```
 
 `stop` и `down` не удаляют именованный volume `hhpulse_data`. База SQLite и

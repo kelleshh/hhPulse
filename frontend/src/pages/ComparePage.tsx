@@ -32,7 +32,7 @@ export function ComparePage() {
   const roles = useRoles();
   const [comparisonMode, setComparisonMode] = useState<"roles" | "experience">("roles");
   const [selected, setSelected] = useState(["96", "156", "165"]);
-  const [metric, setMetric] = useState<MetricKey>("hhIndex");
+  const [metric, setMetric] = useState<MetricKey>("vacancies");
   const [mode, setMode] = useState<ViewMode>("absolute");
   const [geometry, setGeometry] = useState<ChartGeometry>("line-points");
   const [experience, setExperience] = useState("any");

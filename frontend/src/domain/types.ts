@@ -16,8 +16,11 @@ export type MetricKey =
   | "hhIndex"
   | "vacancies"
   | "resumes"
+  | "meanResponses"
+  | "medianResponses"
   | "lowResponseShare"
   | "salaryVisibleShare"
+  | "resumeSalaryVisibleShare"
   | "remoteShare"
   | "hybridShare"
   | "higherEducationShare"
@@ -30,6 +33,8 @@ export interface Job {
   roleSelectionMode: RoleSelectionMode;
   roleIds: string[];
   includeExperienceStrata: boolean;
+  vacancySlices: string[];
+  resumeSlices: string[];
   maxConcurrency: number;
   maxRps: number;
   userAgentMode: UserAgentMode;
@@ -47,6 +52,8 @@ export interface CreateJobInput {
   roleSelectionMode: RoleSelectionMode;
   roleIds: string[];
   includeExperienceStrata: boolean;
+  vacancySlices: string[];
+  resumeSlices: string[];
   maxConcurrency: number;
   maxRps: number;
   userAgentMode: UserAgentMode;
@@ -141,11 +148,15 @@ export interface SnapshotData {
   date: string;
   roleId: string;
   roleName: string;
+  methodologyVersion?: string | null;
   vacancies: number;
-  resumes: number;
-  hhIndex: number;
-  lowResponseShare: number;
-  salaryVisibleShare: number;
+  resumes: number | null;
+  hhIndex: number | null;
+  meanResponses: number | null;
+  medianResponses: number | null;
+  lowResponseShare: number | null;
+  salaryVisibleShare: number | null;
+  resumeSalaryVisibleShare?: number | null;
   remoteShare: number | null;
   hybridShare: number | null;
   higherEducationShare: number | null;
@@ -159,15 +170,19 @@ export interface SnapshotData {
     labels: DistributionItem[];
   };
   facets: Record<string, DistributionItem[]>;
+  resumeFacets?: Record<string, DistributionItem[]>;
 }
 
 export interface RoleHistoryPoint {
   date: string;
   hhIndex: number | null;
   vacancies: number;
-  resumes: number;
+  resumes: number | null;
+  meanResponses: number | null;
+  medianResponses: number | null;
   lowResponseShare: number | null;
   salaryVisibleShare: number | null;
+  resumeSalaryVisibleShare?: number | null;
   remoteShare: number | null;
   hybridShare: number | null;
   higherEducationShare: number | null;

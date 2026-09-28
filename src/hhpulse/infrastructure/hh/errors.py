@@ -1,5 +1,6 @@
 from hhpulse.application.errors import (
     MarketSourceError,
+    MarketSourceRejected,
     MarketSourceThrottled,
     MarketSourceUnavailable,
     ParserContractBroken,
@@ -8,10 +9,11 @@ from hhpulse.application.errors import (
 HhInfrastructureError = MarketSourceError
 HhSourceUnavailable = MarketSourceUnavailable
 HhThrottled = MarketSourceThrottled
+HhAccessRejected = MarketSourceRejected
 HhParserContractBroken = ParserContractBroken
 
-
 __all__ = [
+    "HhAccessRejected",
     "HhInfrastructureError",
     "HhParserContractBroken",
     "HhSourceUnavailable",

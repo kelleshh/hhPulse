@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from hhpulse.api.routes import alerts, analytics, catalog, health, jobs, runs
+from hhpulse.api.routes import alerts, analytics, browser, catalog, health, jobs, runs
 from hhpulse.bootstrap import Container, build_container
 from hhpulse.config import Settings
 
@@ -38,4 +38,5 @@ def create_app(
     app.include_router(catalog.router)
     app.include_router(analytics.router)
     app.include_router(alerts.router)
+    app.include_router(browser.router)
     return app

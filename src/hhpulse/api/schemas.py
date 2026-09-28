@@ -17,12 +17,14 @@ class CreateJobRequest(BaseModel):
     region_ids: list[str] = Field(min_length=1)
     role_selection_mode: RoleSelectionMode = RoleSelectionMode.ALL
     role_ids: list[str] = Field(default_factory=list)
-    max_concurrency: Literal[1] = 1
-    max_rps: float = Field(default=1.0, gt=0, le=1.0)
+    max_concurrency: int = Field(default=2, ge=1, le=8)
+    max_rps: float = Field(default=2.0, gt=0, le=10.0)
     user_agent_mode: Literal[UserAgentMode.SHARED] = UserAgentMode.SHARED
     timezone: str = "Europe/Moscow"
     enabled: bool = True
     include_experience_strata: bool = False
+    vacancy_slices: list[str] = Field(default_factory=list)
+    resume_slices: list[str] = Field(default_factory=list)
 
 
 class SetJobEnabledRequest(BaseModel):
@@ -38,6 +40,8 @@ class JobResponse(BaseModel):
     role_selection_mode: RoleSelectionMode
     role_ids: list[str]
     include_experience_strata: bool
+    vacancy_slices: list[str]
+    resume_slices: list[str]
     max_concurrency: int
     max_rps: float
     user_agent_mode: UserAgentMode
@@ -57,6 +61,8 @@ class JobResponse(BaseModel):
             role_selection_mode=job.scope.role_selection_mode,
             role_ids=list(job.scope.role_ids),
             include_experience_strata=job.scope.include_experience_strata,
+            vacancy_slices=list(job.scope.vacancy_slices),
+            resume_slices=list(job.scope.resume_slices),
             max_concurrency=job.rate_limit.max_concurrency,
             max_rps=job.rate_limit.max_rps,
             user_agent_mode=job.user_agent_mode,

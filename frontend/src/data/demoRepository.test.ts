@@ -10,6 +10,8 @@ describe("DemoRepository", () => {
       roleSelectionMode: "selected",
       roleIds: ["96"],
       includeExperienceStrata: true,
+      vacancySlices: [],
+      resumeSlices: [],
       maxConcurrency: 2,
       maxRps: 0.5,
       userAgentMode: "shared",
@@ -21,7 +23,7 @@ describe("DemoRepository", () => {
     const stored = (await repository.listJobs()).find((job) => job.id === created.id);
 
     expect(stored?.enabled).toBe(false);
-    expect(stored?.methodologyVersion).toBe("hh-index-daily-v1");
+    expect(stored?.methodologyVersion).toBe("hh-api-vacancy-daily-v2");
   });
 
   it("returns gaps as nulls instead of zeroes", async () => {

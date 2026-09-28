@@ -23,6 +23,8 @@ const MATRIX_METRICS: MetricKey[] = [
   "hhIndex",
   "vacancies",
   "resumes",
+  "meanResponses",
+  "medianResponses",
   "lowResponseShare",
   "salaryVisibleShare",
   "remoteShare",
@@ -82,7 +84,7 @@ function correlation(left: Array<number | null>, right: Array<number | null>): n
 
 export function ProfessionConsolePage() {
   const [dateTo, setDateTo] = useState("");
-  const [metric, setMetric] = useState<MetricKey>("hhIndex");
+  const [metric, setMetric] = useState<MetricKey>("vacancies");
   const [search, setSearch] = useState("");
   const [sortMode, setSortMode] = useState<SortMode>("metric-desc");
   const matrix = useRoleMatrix(dateTo || undefined);
@@ -119,7 +121,7 @@ export function ProfessionConsolePage() {
         <div>
           <span className="console-kicker">ANALYTICAL CONTROL SURFACE / {matrix.data.date}</span>
           <h1>Пульт профессий</h1>
-          <p>{matrix.data.rows.length} ролей · 9 показателей · до 90 дней истории. Один цвет всегда означает одно место на шкале.</p>
+          <p>{matrix.data.rows.length} ролей · 11 показателей · до 90 дней истории. Один цвет всегда означает одно место на шкале.</p>
         </div>
         <div className="console-heading__stamp"><Grid3X3 size={18} /><span>Срез опубликован<strong>{matrix.data.date}</strong></span></div>
       </header>
@@ -194,11 +196,11 @@ function RankPanel({ rows, metric, minimum, maximum }: { rows: RoleMatrixRow[]; 
 }
 
 function MarketScatterPanel({ rows, metric, minimum, maximum }: { rows: RoleMatrixRow[]; metric: MetricKey; minimum: number; maximum: number }) {
-  const points = rows.filter((row) => row.vacancies > 0 && row.resumes > 0).map((row) => ({ x: row.vacancies, y: row.resumes, z: Math.max(30, numericValue(row, metric) ?? 30), metric: numericValue(row, metric), name: row.roleName, hhIndex: row.hhIndex }));
+  const points = rows.filter((row) => row.vacancies > 0 && row.meanResponses !== null && row.meanResponses > 0).map((row) => ({ x: row.vacancies, y: row.meanResponses ?? 0, z: Math.max(30, numericValue(row, metric) ?? 30), metric: numericValue(row, metric), name: row.roleName, hhIndex: row.hhIndex }));
   return (
     <section className="console-panel console-panel--wide">
-      <PanelHeading icon={<Grid3X3 size={17} />} code="PHASE-03" title="Фазовая плоскость рынка" description="Логарифмы вакансий и резюме; размер и цвет — выбранный показатель" />
-      <div className="console-chart console-chart--large"><ResponsiveContainer width="100%" height="100%"><ScatterChart margin={{ top: 12, right: 18, left: 0, bottom: 8 }}><CartesianGrid stroke="rgb(201, 197, 177)" /><XAxis type="number" dataKey="x" name="Вакансии" scale="log" domain={[1, "auto"]} tickFormatter={compact} tick={{ fontSize: 10 }} /><YAxis type="number" dataKey="y" name="Резюме" scale="log" domain={[1, "auto"]} tickFormatter={compact} tick={{ fontSize: 10 }} /><ZAxis type="number" dataKey="z" range={[35, 260]} /><ReferenceLine stroke="rgb(92, 89, 76)" strokeDasharray="4 3" /><Tooltip cursor={{ strokeDasharray: "3 3" }} content={<ScatterTooltip metric={metric} />} /><Scatter data={points} isAnimationActive={false}>{points.map((point) => <Cell key={point.name} fill={rgbScale(point.metric, minimum, maximum)} fillOpacity={0.82} stroke="rgb(35,35,29)" strokeWidth={0.5} />)}</Scatter></ScatterChart></ResponsiveContainer></div>
+      <PanelHeading icon={<Grid3X3 size={17} />} code="PHASE-03" title="Фазовая плоскость рынка" description="Вакансии и среднее число откликов; размер и цвет — выбранный показатель" />
+      <div className="console-chart console-chart--large"><ResponsiveContainer width="100%" height="100%"><ScatterChart margin={{ top: 12, right: 18, left: 0, bottom: 8 }}><CartesianGrid stroke="rgb(201, 197, 177)" /><XAxis type="number" dataKey="x" name="Вакансии" scale="log" domain={[1, "auto"]} tickFormatter={compact} tick={{ fontSize: 10 }} /><YAxis type="number" dataKey="y" name="Среднее откликов" scale="log" domain={[1, "auto"]} tickFormatter={compact} tick={{ fontSize: 10 }} /><ZAxis type="number" dataKey="z" range={[35, 260]} /><ReferenceLine stroke="rgb(92, 89, 76)" strokeDasharray="4 3" /><Tooltip cursor={{ strokeDasharray: "3 3" }} content={<ScatterTooltip metric={metric} />} /><Scatter data={points} isAnimationActive={false}>{points.map((point) => <Cell key={point.name} fill={rgbScale(point.metric, minimum, maximum)} fillOpacity={0.82} stroke="rgb(35,35,29)" strokeWidth={0.5} />)}</Scatter></ScatterChart></ResponsiveContainer></div>
     </section>
   );
 }
@@ -206,11 +208,11 @@ function MarketScatterPanel({ rows, metric, minimum, maximum }: { rows: RoleMatr
 function ScatterTooltip({ active, payload, metric }: { active?: boolean; payload?: Array<{ payload: { name: string; x: number; y: number; metric: number | null; hhIndex: number | null } }>; metric: MetricKey }) {
   if (!active || !payload?.length) return null;
   const point = payload[0].payload;
-  return <div className="console-tooltip"><strong>{point.name}</strong><span>Вакансии: {compact(point.x)}</span><span>Резюме: {compact(point.y)}</span><span>{METRICS[metric].shortLabel}: {formatMetric(point.metric, metric, "absolute")}</span></div>;
+  return <div className="console-tooltip"><strong>{point.name}</strong><span>Вакансии: {compact(point.x)}</span><span>Среднее откликов: {compact(point.y)}</span><span>{METRICS[metric].shortLabel}: {formatMetric(point.metric, metric, "absolute")}</span></div>;
 }
 
 function CorrelationPanel({ rows }: { rows: RoleMatrixRow[] }) {
-  const selected: MetricKey[] = ["hhIndex", "vacancies", "resumes", "salaryVisibleShare", "remoteShare", "noExperienceShare"];
+  const selected: MetricKey[] = ["vacancies", "meanResponses", "medianResponses", "lowResponseShare", "salaryVisibleShare", "remoteShare"];
   return (
     <section className="console-panel console-panel--correlation">
       <PanelHeading icon={<Sigma size={17} />} code="CORR-04" title="Матрица корреляций" description="Коэффициент Пирсона по доступным парам" />
@@ -239,7 +241,7 @@ function RoleCard({ row, metric, minimum, maximum, rank }: { row: RoleMatrixRow;
       <h3 title={row.roleName}>{row.roleName}</h3>
       <div className="role-card__reading"><strong>{formatMetric(value, metric, "absolute")}</strong><small>{METRICS[metric].shortLabel}</small></div>
       <svg className="sparkline" viewBox="0 0 100 32" preserveAspectRatio="none" aria-label={`Динамика: ${row.roleName}`}><line x1="0" x2="100" y1="30" y2="30" /><polyline points={points} style={{ stroke: rgbScale(value, minimum, maximum) }} /></svg>
-      <div className="role-card__foot"><span>VAC <b>{compact(row.vacancies)}</b></span><span>CV <b>{compact(row.resumes)}</b></span><span>HH <b>{row.hhIndex?.toFixed(1) ?? "—"}</b></span></div>
+      <div className="role-card__foot"><span>VAC <b>{compact(row.vacancies)}</b></span><span>RESP <b>{compact(row.meanResponses)}</b></span><span>&lt;10 <b>{row.lowResponseShare === null ? "—" : `${(row.lowResponseShare * 100).toFixed(0)}%`}</b></span></div>
     </article>
   );
 }

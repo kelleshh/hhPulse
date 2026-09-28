@@ -16,8 +16,11 @@ METRIC_KEYS = {
     "hhIndex",
     "vacancies",
     "resumes",
+    "meanResponses",
+    "medianResponses",
     "lowResponseShare",
     "salaryVisibleShare",
+    "resumeSalaryVisibleShare",
     "remoteShare",
     "hybridShare",
     "higherEducationShare",
@@ -49,12 +52,50 @@ class _MarketRow:
     role_name: str
     experience: ExperienceBand
     vacancies: int = 0
-    resumes: int = 0
+    resumes: int | None = None
+    methodology_version: str | None = None
     vacancy_facets: dict[str, dict[str, _FacetOption]] = field(default_factory=dict)
+    resume_facets: dict[str, dict[str, _FacetOption]] = field(default_factory=dict)
+    response_histogram: dict[int, int] = field(default_factory=dict)
+    response_expected_vacancies: int = 0
+    response_observed_vacancies: int = 0
 
     @property
     def hh_index(self) -> float | None:
-        return self.resumes / self.vacancies if self.vacancies else None
+        if self.resumes is None or not self.vacancies:
+            return None
+        return self.resumes / self.vacancies
+
+    @property
+    def mean_responses(self) -> float | None:
+        if (
+            not self.response_observed_vacancies
+            or self.response_observed_vacancies != self.response_expected_vacancies
+        ):
+            return None
+        total = sum(value * frequency for value, frequency in self.response_histogram.items())
+        return total / self.response_observed_vacancies
+
+    @property
+    def median_responses(self) -> float | None:
+        if (
+            not self.response_observed_vacancies
+            or self.response_observed_vacancies != self.response_expected_vacancies
+        ):
+            return None
+        lower_position = (self.response_observed_vacancies - 1) // 2
+        upper_position = self.response_observed_vacancies // 2
+        lower = self._response_value_at(lower_position)
+        upper = self._response_value_at(upper_position)
+        return (lower + upper) / 2
+
+    def _response_value_at(self, position: int) -> int:
+        seen = 0
+        for value, frequency in sorted(self.response_histogram.items()):
+            seen += frequency
+            if position < seen:
+                return value
+        raise RuntimeError("response histogram is inconsistent")
 
 
 class MarketAnalytics:
@@ -199,6 +240,7 @@ class MarketAnalytics:
             "date": observation_date.isoformat(),
             "roleId": row.role_id,
             "roleName": row.role_name,
+            "methodologyVersion": row.methodology_version,
             **self._metric_payload(row),
             "distributions": {
                 "experience": facet_payload.get("experience", []),
@@ -209,6 +251,10 @@ class MarketAnalytics:
                 "labels": facet_payload.get("label", []),
             },
             "facets": facet_payload,
+            "resumeFacets": {
+                key: self._distribution(options, denominator=row.resumes or 0)
+                for key, options in row.resume_facets.items()
+            },
         }
 
     async def role_matrix(
@@ -281,7 +327,7 @@ class MarketAnalytics:
             alert_id = f"run:{run.id}:{run.status.value}"
             severity = "critical" if run.status is RunStatus.PARSER_BROKEN else "warning"
             title = {
-                RunStatus.PARSER_BROKEN: "Контракт HTML изменился",
+                RunStatus.PARSER_BROKEN: "Контракт HH API изменился",
                 RunStatus.FAILED: "Сбор завершился ошибкой",
                 RunStatus.EXPIRED: "Сбор не завершился до конца дня",
                 RunStatus.WAITING_SOURCE: "Источник временно недоступен",
@@ -308,38 +354,50 @@ class MarketAnalytics:
         cls,
         records: Sequence[PublishedObservation],
     ) -> list[_MarketRow]:
-        deduplicated: dict[tuple[str, ...], PublishedObservation] = {}
-        for record in records:
-            query = record.observation.query
-            observation_key = (
-                query.observation_date.isoformat(),
-                query.region_id,
-                query.professional_role_id,
-                query.experience.value,
-                query.target.value,
-            )
-            deduplicated[observation_key] = record
-
         pairs: dict[
             tuple[date, str, str, ExperienceBand],
-            dict[SearchTarget, ParsedSearchPage],
+            dict[tuple[SearchTarget, tuple[tuple[str, tuple[str, ...]], ...]], ParsedSearchPage],
         ] = defaultdict(dict)
-        for record in deduplicated.values():
+        names: dict[str, str] = {}
+        for record in records:
             observation = record.observation
             query = observation.query
-            query_key = (
-                query.observation_date,
-                query.region_id,
-                query.professional_role_id,
-                query.experience,
-            )
-            pairs[query_key][query.target] = observation.page
+            page = observation.page
+            role_options = page.facet("professional_role")
+            if query.professional_role_id == "*":
+                if role_options is None:
+                    continue
+                roles = tuple(
+                    (option.id, option.title, option.count) for option in role_options.options
+                )
+            else:
+                roles = (
+                    (
+                        query.professional_role_id,
+                        cls._role_name(query.professional_role_id, page),
+                        page.total_count,
+                    ),
+                )
+            filter_key = tuple((item.key, item.values) for item in query.extra_filters)
+            for role_id, role_name, role_count in roles:
+                names[role_id] = role_name
+                key = (query.observation_date, query.region_id, role_id, query.experience)
+                role_page = (
+                    ParsedSearchPage(
+                        total_count=role_count,
+                        facets=(),
+                        methodology_version=page.methodology_version,
+                    )
+                    if query.professional_role_id == "*"
+                    else page
+                )
+                pairs[key][(query.target, filter_key)] = role_page
 
         aggregates: dict[tuple[date, str, ExperienceBand], _MarketRow] = {}
         for (observation_date, _region_id, role_id, experience), pages in pairs.items():
-            vacancy = pages.get(SearchTarget.VACANCY)
-            resume = pages.get(SearchTarget.RESUME)
-            if vacancy is None or resume is None:
+            vacancy = pages.get((SearchTarget.VACANCY, ()))
+            resume = pages.get((SearchTarget.RESUME, ()))
+            if vacancy is None:
                 continue
             aggregate_key = (observation_date, role_id, experience)
             row = aggregates.setdefault(
@@ -347,13 +405,37 @@ class MarketAnalytics:
                 _MarketRow(
                     observation_date=observation_date,
                     role_id=role_id,
-                    role_name=cls._role_name(role_id, vacancy, resume),
+                    role_name=names.get(role_id, role_id),
                     experience=experience,
+                    methodology_version=vacancy.methodology_version,
                 ),
             )
             row.vacancies += vacancy.total_count
-            row.resumes += resume.total_count
+            if resume is not None:
+                row.resumes = (row.resumes or 0) + resume.total_count
             cls._merge_facets(row.vacancy_facets, vacancy)
+            cls._merge_response_stats(row, vacancy)
+            for (target, filters), filtered_page in pages.items():
+                if not filters:
+                    continue
+                output = row.vacancy_facets if target is SearchTarget.VACANCY else row.resume_facets
+                for facet_key, values in filters:
+                    if len(values) != 1:
+                        continue
+                    options = output.setdefault(facet_key, {})
+                    current = options.setdefault(
+                        values[0], _FacetOption(title=cls._facet_title(values[0]))
+                    )
+                    current.count += filtered_page.total_count
+        for (observation_date, role_id, experience), row in aggregates.items():
+            if experience is ExperienceBand.ANY:
+                no_experience = aggregates.get(
+                    (observation_date, role_id, ExperienceBand.NO_EXPERIENCE)
+                )
+                if no_experience is not None:
+                    row.vacancy_facets.setdefault("experience", {})["noExperience"] = _FacetOption(
+                        "Без опыта", no_experience.vacancies
+                    )
         return sorted(
             aggregates.values(),
             key=lambda row: (row.observation_date, row.role_name.casefold(), row.experience.value),
@@ -368,6 +450,18 @@ class MarketAnalytics:
                 aggregate.count += option.count
 
     @staticmethod
+    def _merge_response_stats(row: _MarketRow, page: ParsedSearchPage) -> None:
+        stats = page.response_stats
+        if stats is None:
+            return
+        row.response_expected_vacancies += stats.expected_vacancies
+        row.response_observed_vacancies += stats.observed_vacancies
+        for item in stats.histogram:
+            row.response_histogram[item.responses] = (
+                row.response_histogram.get(item.responses, 0) + item.vacancies
+            )
+
+    @staticmethod
     def _role_name(role_id: str, *pages: ParsedSearchPage) -> str:
         for page in pages:
             facet = page.facet("professional_role")
@@ -375,6 +469,21 @@ class MarketAnalytics:
             if option is not None:
                 return option.title
         return f"Профессия {role_id}"
+
+    @staticmethod
+    def _facet_title(value: str) -> str:
+        return {
+            "with_salary": "Зарплата указана",
+            "only_with_salary": "Желаемая зарплата указана",
+            "low_performance": "Меньше 10 откликов",
+            "REMOTE": "Удалённо",
+            "HYBRID": "Гибрид",
+            "ON_SITE": "На месте",
+            "FIELD_WORK": "Разъездная работа",
+            "FLY_IN_FLY_OUT": "Вахта",
+            "higher": "Высшее",
+            "special_secondary": "Среднее специальное",
+        }.get(value, value)
 
     @classmethod
     def _metric_payload(cls, row: _MarketRow) -> dict[str, float | int | None]:
@@ -388,6 +497,13 @@ class MarketAnalytics:
             return row.vacancies
         if metric == "resumes":
             return row.resumes
+        if metric == "resumeSalaryVisibleShare":
+            option = row.resume_facets.get("label", {}).get("only_with_salary")
+            return option.count / row.resumes if option is not None and row.resumes else None
+        if metric == "meanResponses":
+            return row.mean_responses
+        if metric == "medianResponses":
+            return row.median_responses
         mapping = {
             "lowResponseShare": ("label", "low_performance"),
             "salaryVisibleShare": ("label", "with_salary"),

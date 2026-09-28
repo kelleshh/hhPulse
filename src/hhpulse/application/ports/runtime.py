@@ -10,13 +10,13 @@ class Sleeper(Protocol):
     async def sleep(self, seconds: float) -> None: ...
 
 
-class HtmlQuarantine(Protocol):
+class PayloadQuarantine(Protocol):
     async def save(
         self,
         *,
         run_id: str,
         unit_id: str | None,
-        html: str,
+        payload: str,
         observed_at: datetime,
     ) -> str: ...
 

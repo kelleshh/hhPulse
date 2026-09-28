@@ -70,11 +70,11 @@ class AdvancingSleeper:
 
 class MemoryQuarantine:
     def __init__(self) -> None:
-        self.documents: list[str] = []
+        self.payloads: list[str] = []
 
     async def save(self, **kwargs: object) -> str:
-        self.documents.append(str(kwargs["html"]))
-        return "diagnostic.html"
+        self.payloads.append(str(kwargs["payload"]))
+        return "diagnostic.json"
 
     async def purge_expired(self, *, now: datetime) -> int:
         return 0
@@ -189,7 +189,7 @@ async def test_parser_contract_break_quarantines_html_and_aborts_whole_run(tmp_p
     job = _job(clock.now(), max_concurrency=1, include_experience=False)
     await jobs.add(job)
     source = FakeSource(
-        outcomes=[ParserContractBroken("missing searchClusters", raw_html="<html>broken</html>")]
+        outcomes=[ParserContractBroken("missing clusters", raw_payload='{"broken":true}')]
     )
     quarantine = MemoryQuarantine()
 
@@ -200,7 +200,7 @@ async def test_parser_contract_break_quarantines_html_and_aborts_whole_run(tmp_p
 
     assert run.status is RunStatus.PARSER_BROKEN
     assert run.error_code == "PARSER_CONTRACT_BROKEN"
-    assert quarantine.documents == ["<html>broken</html>"]
+    assert quarantine.payloads == ['{"broken":true}']
     assert all(unit.status is RunUnitStatus.FAILED for unit in await repository.list_units(run.id))
     with sqlite3.connect(db_path) as connection:
         assert connection.execute("SELECT COUNT(*) FROM search_observations").fetchone()[0] == 0
@@ -311,7 +311,7 @@ async def test_parser_break_during_preflight_creates_red_terminal_run(tmp_path) 
     source = FakeSource(
         outcomes=[
             ProbeFailure(
-                ParserContractBroken("catalog contract changed", raw_html="<html>changed</html>")
+                ParserContractBroken("catalog contract changed", raw_payload='{"changed":true}')
             )
         ]
     )
@@ -324,7 +324,7 @@ async def test_parser_break_during_preflight_creates_red_terminal_run(tmp_path) 
 
     assert run.status is RunStatus.PARSER_BROKEN
     assert run.total_units == 0
-    assert quarantine.documents == ["<html>changed</html>"]
+    assert quarantine.payloads == ['{"changed":true}']
 
 
 async def test_missing_staged_row_rolls_back_publish_state_transition(tmp_path) -> None:

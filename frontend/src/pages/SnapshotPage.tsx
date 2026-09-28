@@ -8,6 +8,12 @@ import { DataSourceError } from "../data/contracts";
 
 const today = new Date();
 const todayIso = today.toISOString().slice(0, 10);
+const resumeFacetTitles: Record<string, string> = {
+  label: "Желаемая зарплата",
+  work_format: "Формат работы",
+  education_level: "Образование",
+  employment: "Занятость",
+};
 
 export function SnapshotPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -46,15 +52,18 @@ function SnapshotContent({ data }: { data: NonNullable<ReturnType<typeof useSnap
   return (
     <>
       <section className="snapshot-title">
-        <div><h2>{data.roleName}</h2><p>Москва · любой опыт</p></div>
-        <span className="method-note"><Info size={16} />Методология hh-index-daily-v1</span>
+        <div><h2>{data.roleName}</h2><p>Выбранная география · любой опыт</p></div>
+        <span className="method-note"><Info size={16} />Методология {data.methodologyVersion ?? "историческая"}</span>
       </section>
       <section className="snapshot-measures snapshot-measures--extended" aria-label="Основные показатели">
         <div><span>Вакансии</span><strong>{data.vacancies.toLocaleString("ru-RU")}</strong><small>активные объявления</small></div>
-        <div><span>Резюме</span><strong>{data.resumes.toLocaleString("ru-RU")}</strong><small>активны за 60 дней</small></div>
-        <div className="snapshot-measures__focus"><span>hh-индекс</span><strong>{data.hhIndex.toLocaleString("ru-RU", { maximumFractionDigits: 1 })}</strong><small>резюме на вакансию</small></div>
-        <div><span>Менее 10 откликов</span><strong>{(data.lowResponseShare * 100).toFixed(1)}%</strong><small>от всех вакансий</small></div>
-        <div><span>Зарплата указана</span><strong>{(data.salaryVisibleShare * 100).toFixed(1)}%</strong><small>от всех вакансий</small></div>
+        <div><span>Резюме</span><strong>{data.resumes === null ? "н/д" : data.resumes.toLocaleString("ru-RU")}</strong><small>{data.resumes === null ? "источник не подключён" : "активны за 60 дней"}</small></div>
+        <div className="snapshot-measures__focus"><span>hh-индекс</span><strong>{data.hhIndex === null ? "н/д" : data.hhIndex.toLocaleString("ru-RU", { maximumFractionDigits: 1 })}</strong><small>{data.hhIndex === null ? "нужен источник резюме" : "резюме на вакансию"}</small></div>
+        <div><span>Среднее откликов</span><strong>{data.meanResponses === null ? "—" : data.meanResponses.toLocaleString("ru-RU", { maximumFractionDigits: 1 })}</strong><small>на вакансию, не мера конкуренции</small></div>
+        <div><span>Медиана откликов</span><strong>{data.medianResponses === null ? "—" : data.medianResponses.toLocaleString("ru-RU", { maximumFractionDigits: 1 })}</strong><small>на вакансию, не мера конкуренции</small></div>
+        <div><span>Менее 10 откликов</span><strong>{data.lowResponseShare === null ? "—" : `${(data.lowResponseShare * 100).toFixed(1)}%`}</strong><small>от всех вакансий</small></div>
+        <div><span>Зарплата указана</span><strong>{data.salaryVisibleShare === null ? "—" : `${(data.salaryVisibleShare * 100).toFixed(1)}%`}</strong><small>от всех вакансий</small></div>
+        <div><span>Желаемая зарплата указана</span><strong>{data.resumeSalaryVisibleShare == null ? "—" : `${(data.resumeSalaryVisibleShare * 100).toFixed(1)}%`}</strong><small>от всех резюме, включая скрытые</small></div>
         <div><span>Удалённая работа</span><strong>{data.remoteShare === null ? "—" : `${(data.remoteShare * 100).toFixed(1)}%`}</strong><small>от всех вакансий</small></div>
         <div><span>Гибридный формат</span><strong>{data.hybridShare === null ? "—" : `${(data.hybridShare * 100).toFixed(1)}%`}</strong><small>от всех вакансий</small></div>
         <div><span>Без опыта</span><strong>{data.noExperienceShare === null ? "—" : `${(data.noExperienceShare * 100).toFixed(1)}%`}</strong><small>от всех вакансий</small></div>
@@ -68,7 +77,8 @@ function SnapshotContent({ data }: { data: NonNullable<ReturnType<typeof useSnap
         <DistributionBars title="Образование" items={data.distributions.education} />
         <DistributionBars title="Метки HH" items={data.distributions.labels} />
       </div>
-      <p className="snapshot-footnote">Суммы в распределениях могут отличаться от общего числа вакансий: один ответ HH может относиться к нескольким вариантам фасета.</p>
+      {Object.entries(data.resumeFacets ?? {}).length ? <section><h3>Резюме · полные отфильтрованные счётчики</h3><div className="distribution-grid">{Object.entries(data.resumeFacets ?? {}).map(([key, items]) => <DistributionBars key={key} title={resumeFacetTitles[key] ?? key} items={items} />)}</div></section> : null}
+      <p className="snapshot-footnote">Срезы отображаются только для включённых фильтров. Один результат HH может относиться к нескольким вариантам фильтра.</p>
     </>
   );
 }

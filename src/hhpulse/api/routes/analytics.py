@@ -22,7 +22,7 @@ def service(container: Container) -> MarketAnalytics:
 @router.get("/overview")
 async def overview(
     container: ContainerDependency,
-    metric: str = "hhIndex",
+    metric: str = "vacancies",
 ) -> dict[str, Any]:
     try:
         payload = await service(container).overview(metric=metric, today=container.clock.today())
@@ -38,7 +38,7 @@ async def comparison(
     container: ContainerDependency,
     role_ids: str = "",
     comparison_mode: str = "roles",
-    metric: str = "hhIndex",
+    metric: str = "vacancies",
     experience: str = "any",
     experience_strata: str = "",
     date_from: date | None = None,

@@ -17,6 +17,10 @@ class Settings:
     retry_max_seconds: float = 900.0
     preflight_successes: int = 1
     scheduler_poll_seconds: float = 30.0
+    hh_access_token: str = ""
+    hh_user_agent: str = "hhPulse/0.4 (configure-contact-email)"
+    collect_response_stats: bool = True
+    browser_token: str = ""
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -48,4 +52,11 @@ class Settings:
             scheduler_poll_seconds=float(
                 os.getenv("HHPULSE_SCHEDULER_POLL_SECONDS", str(defaults.scheduler_poll_seconds))
             ),
+            hh_access_token=os.getenv("HHPULSE_HH_ACCESS_TOKEN", defaults.hh_access_token),
+            hh_user_agent=os.getenv("HHPULSE_HH_USER_AGENT", defaults.hh_user_agent),
+            collect_response_stats=os.getenv(
+                "HHPULSE_COLLECT_RESPONSE_STATS",
+                "1" if defaults.collect_response_stats else "0",
+            ).strip().lower() in {"1", "true", "yes", "on"},
+            browser_token=os.getenv("HHPULSE_BROWSER_TOKEN", defaults.browser_token),
         )

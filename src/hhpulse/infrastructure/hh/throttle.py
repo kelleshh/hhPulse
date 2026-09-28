@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-import random
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
@@ -16,10 +16,10 @@ class BackoffSnapshot:
 
 
 class AdaptiveThrottle:
-    """Single-flight transport with a post-response truncated-normal delay.
+    """Global deterministic rate limiter with adaptive 429 backoff.
 
-    Every response is followed by a delay in [0.9, 1.8] seconds. HTTP 429/temporary source
-    pressure only makes that delay longer; successes gradually restore the base distribution.
+    Requests are paced only by the configured RPS/concurrency policy and
+    server-provided Retry-After backoff. Client identity stays stable.
     """
 
     def __init__(
@@ -28,63 +28,54 @@ class AdaptiveThrottle:
         *,
         max_multiplier: float = 120.0,
         recovery_successes: int = 8,
-        delay_min_seconds: float = 0.9,
-        delay_max_seconds: float = 1.8,
-        delay_mean_seconds: float = 1.35,
-        delay_stddev_seconds: float = 0.15,
-        random_source: random.Random | None = None,
         sleeper: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
-        if not 0 < delay_min_seconds < delay_max_seconds:
-            raise ValueError("post-response delay bounds must be positive and ordered")
-        if not delay_min_seconds <= delay_mean_seconds <= delay_max_seconds:
-            raise ValueError("post-response delay mean must be inside its bounds")
-        if delay_stddev_seconds <= 0:
-            raise ValueError("post-response delay standard deviation must be positive")
-        self._rate_multiplier = max(1.0, 1.0 / policy.max_rps)
+        self._base_interval = 1.0 / policy.max_rps
         self._max_multiplier = max_multiplier
         self._recovery_successes = recovery_successes
         self._multiplier = 1.0
         self._consecutive_successes = 0
         self._throttled_count = 0
-        self._delay_min_seconds = delay_min_seconds
-        self._delay_max_seconds = delay_max_seconds
-        self._delay_mean_seconds = delay_mean_seconds
-        self._delay_stddev_seconds = delay_stddev_seconds
-        self._random = random_source or random.Random()
         self._sleeper = sleeper
-        # requests.Session is deliberately single-flight and is not shared concurrently.
-        self._concurrency = asyncio.Semaphore(1)
+        self._monotonic = monotonic
+        self._next_allowed = 0.0
+        self._rate_lock = asyncio.Lock()
+        self._concurrency = asyncio.Semaphore(policy.max_concurrency)
 
     async def __aenter__(self) -> AdaptiveThrottle:
         await self._concurrency.acquire()
+        async with self._rate_lock:
+            now = self._monotonic()
+            if self._next_allowed > now:
+                await self._sleeper(self._next_allowed - now)
+                now = self._monotonic()
+            self._next_allowed = now + self._base_interval * self._multiplier
         return self
 
     async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:
         self._concurrency.release()
 
     async def wait_after_response(self) -> None:
-        await self._sleeper(self.next_delay_seconds())
+        """Legacy no-op kept for old callers/tests during migration."""
 
     def next_delay_seconds(self) -> float:
-        while True:
-            delay = self._random.normalvariate(
-                self._delay_mean_seconds,
-                self._delay_stddev_seconds,
-            )
-            if self._delay_min_seconds <= delay <= self._delay_max_seconds:
-                return delay * self._rate_multiplier * self._multiplier
+        return self._base_interval * self._multiplier
 
     def on_throttled(self, *, retry_after_seconds: float | None = None) -> None:
         self._throttled_count += 1
         self._consecutive_successes = 0
         self._multiplier = min(self._max_multiplier, max(2.0, self._multiplier * 2.0))
         if retry_after_seconds is not None and retry_after_seconds > 0:
-            minimum_multiplier = retry_after_seconds / self._delay_mean_seconds
+            minimum_multiplier = retry_after_seconds / self._base_interval
             self._multiplier = min(
                 self._max_multiplier,
                 max(self._multiplier, minimum_multiplier),
             )
+        self._next_allowed = max(
+            self._next_allowed,
+            self._monotonic() + self._base_interval * self._multiplier,
+        )
 
     def on_unavailable(self) -> None:
         self._consecutive_successes = 0

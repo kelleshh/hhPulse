@@ -27,7 +27,7 @@ export function JobsPage() {
             <article className="job-row" key={job.id}>
               <div className="job-row__state"><span className={job.enabled ? "source-light" : "source-light source-light--off"} /><span><strong>{job.enabled ? "Включена" : "На паузе"}</strong><small>{job.timezone}</small></span></div>
               <div className="job-row__name"><Link to={`/jobs/${job.id}`}>{job.name}</Link><small>{job.roleSelectionMode === "all" ? "Все профессии" : `${job.roleIds.length} выбранных профессии`} · {job.regionIds.length} регион</small></div>
-              <dl className="job-row__limits"><div><dt>Параллельно</dt><dd>{job.maxConcurrency}</dd></div><div><dt>Лимит</dt><dd>{job.maxRps} запр./с</dd></div><div><dt>Опыт</dt><dd>{job.includeExperienceStrata ? "5 страт" : "общий"}</dd></div></dl>
+              <dl className="job-row__limits"><div><dt>Поиски</dt><dd>Последовательно</dd></div><div><dt>Пауза</dt><dd>2–4 с</dd></div><div><dt>Опыт</dt><dd>{job.includeExperienceStrata ? "5 страт" : "общий"}</dd></div></dl>
               <div className="job-row__actions">
                 <Button size="small" icon={<CirclePlay size={16} />} disabled={!job.enabled || trigger.isPending} onClick={() => trigger.mutate(job.id)}>Запустить</Button>
                 <button className="switch" role="switch" aria-checked={job.enabled} aria-label={`${job.enabled ? "Остановить" : "Включить"} задачу ${job.name}`} onClick={() => setEnabled.mutate({ jobId: job.id, enabled: !job.enabled })}><span /></button>

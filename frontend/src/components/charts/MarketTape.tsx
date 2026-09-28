@@ -6,7 +6,7 @@ const LABELS: Record<ObservationState, string> = {
   published: "Срез опубликован",
   gap: "Компьютер был выключен или сбор не завершился",
   running: "Сегодняшний сбор идёт",
-  parser_broken: "Сбор остановлен: изменился HTML",
+  parser_broken: "Сбор остановлен: изменился контракт HH API",
 };
 
 export function MarketTape({ days, onSelect }: { days: ObservationDay[]; onSelect?: (day: ObservationDay) => void }) {
@@ -21,7 +21,7 @@ export function MarketTape({ days, onSelect }: { days: ObservationDay[]; onSelec
           <span><i className="tape-dot tape-dot--published" />Опубликовано</span>
           <span><i className="tape-dot tape-dot--gap" />Пропуск</span>
           <span><i className="tape-dot tape-dot--running" />Идёт сбор</span>
-          <span><i className="tape-dot tape-dot--parser_broken" />Ошибка парсера</span>
+          <span><i className="tape-dot tape-dot--parser_broken" />Ошибка контракта API</span>
         </div>
       </div>
       <div className="market-tape__track">

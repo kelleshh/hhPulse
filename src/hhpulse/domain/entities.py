@@ -3,8 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import date, datetime
 
-from hhpulse.domain.enums import RoleSelectionMode, RunStatus, RunUnitStatus, UserAgentMode
+from hhpulse.domain.enums import (
+    RoleSelectionMode,
+    RunStatus,
+    RunUnitStatus,
+    SearchTarget,
+    UserAgentMode,
+)
 from hhpulse.domain.errors import DomainError, InvalidStateTransition
+from hhpulse.domain.slices import selected_filters
 from hhpulse.domain.value_objects import (
     DailySchedule,
     Methodology,
@@ -20,12 +27,25 @@ class AnalysisScope:
     role_selection_mode: RoleSelectionMode
     role_ids: tuple[str, ...] = ()
     include_experience_strata: bool = False
+    vacancy_slices: tuple[str, ...] = ()
+    resume_slices: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         regions = unique_strings(self.region_ids, field_name="region_ids")
         roles = unique_strings(self.role_ids, field_name="role_ids")
         object.__setattr__(self, "region_ids", regions)
         object.__setattr__(self, "role_ids", roles)
+        object.__setattr__(
+            self, "vacancy_slices", unique_strings(self.vacancy_slices, field_name="vacancy_slices")
+        )
+        object.__setattr__(
+            self, "resume_slices", unique_strings(self.resume_slices, field_name="resume_slices")
+        )
+        try:
+            selected_filters(SearchTarget.VACANCY, self.vacancy_slices)
+            selected_filters(SearchTarget.RESUME, self.resume_slices)
+        except ValueError as exc:
+            raise DomainError(str(exc)) from exc
 
         if not regions:
             raise DomainError("analysis scope must contain at least one region")

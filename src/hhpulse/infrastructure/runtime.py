@@ -12,7 +12,7 @@ class AsyncioSleeper:
         await asyncio.sleep(seconds)
 
 
-class FileHtmlQuarantine:
+class FilePayloadQuarantine:
     def __init__(
         self,
         directory: str | Path,
@@ -29,14 +29,14 @@ class FileHtmlQuarantine:
         *,
         run_id: str,
         unit_id: str | None,
-        html: str,
+        payload: str,
         observed_at: datetime,
     ) -> str:
         return await asyncio.to_thread(
             self._save_sync,
             run_id,
             unit_id,
-            html,
+            payload,
             observed_at,
         )
 
@@ -47,20 +47,20 @@ class FileHtmlQuarantine:
         self,
         run_id: str,
         unit_id: str | None,
-        html: str,
+        payload: str,
         observed_at: datetime,
     ) -> str:
-        payload = html.encode("utf-8")[: self._max_document_bytes]
+        raw = payload.encode("utf-8")[: self._max_document_bytes]
         self._directory.mkdir(parents=True, exist_ok=True)
         safe_run = self._safe_component(run_id)
         safe_unit = self._safe_component(unit_id or "preflight")
         timestamp = observed_at.strftime("%Y%m%dT%H%M%S%z")
-        name = f"{timestamp}_{safe_run}_{safe_unit}_{uuid4().hex}.html"
+        name = f"{timestamp}_{safe_run}_{safe_unit}_{uuid4().hex}.json"
         path = self._directory / name
         descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         try:
             with os.fdopen(descriptor, "wb") as stream:
-                stream.write(payload)
+                stream.write(raw)
         except BaseException:
             path.unlink(missing_ok=True)
             raise
@@ -73,13 +73,15 @@ class FileHtmlQuarantine:
             return 0
         cutoff = now.timestamp() - self._retention.total_seconds()
         removed = 0
-        for path in self._directory.glob("*.html"):
-            if path.is_file() and path.stat().st_mtime < cutoff:
-                path.unlink(missing_ok=True)
-                removed += 1
+        for pattern in ("*.json", "*.html"):
+            for path in self._directory.glob(pattern):
+                if path.is_file() and path.stat().st_mtime < cutoff:
+                    path.unlink(missing_ok=True)
+                    removed += 1
         return removed
 
     @staticmethod
     def _safe_component(value: str) -> str:
         safe = "".join(character for character in value if character.isalnum() or character in "-_")
         return safe[:80] or "unknown"
+

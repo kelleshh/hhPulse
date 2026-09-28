@@ -6,7 +6,7 @@ export const METRICS: Record<MetricKey, MetricDefinition> = {
     label: "hh-индекс",
     shortLabel: "hh-индекс",
     unit: "ratio",
-    description: "Активные резюме за 60 дней на одну вакансию",
+    description: "Активные резюме за 60 дней на одну вакансию, если подключён источник резюме",
   },
   vacancies: {
     key: "vacancies",
@@ -20,7 +20,21 @@ export const METRICS: Record<MetricKey, MetricDefinition> = {
     label: "Активные резюме",
     shortLabel: "Резюме",
     unit: "count",
-    description: "Резюме со статусом поиска работы за последние 60 дней",
+    description: "Резюме со статусом поиска работы за последние 60 дней, если подключён источник резюме",
+  },
+  meanResponses: {
+    key: "meanResponses",
+    label: "Среднее число откликов",
+    shortLabel: "Ср. откликов",
+    unit: "ratio",
+    description: "Среднее число откликов на активную вакансию. Само по себе не является мерой конкуренции.",
+  },
+  medianResponses: {
+    key: "medianResponses",
+    label: "Медианное число откликов",
+    shortLabel: "Медиана откликов",
+    unit: "ratio",
+    description: "Медиана числа откликов на активную вакансию. Само по себе не является мерой конкуренции.",
   },
   lowResponseShare: {
     key: "lowResponseShare",
@@ -35,6 +49,13 @@ export const METRICS: Record<MetricKey, MetricDefinition> = {
     shortLabel: "Зарплата указана",
     unit: "percent",
     description: "Доля вакансий с видимой зарплатной вилкой",
+  },
+  resumeSalaryVisibleShare: {
+    key: "resumeSalaryVisibleShare",
+    label: "Резюме с указанной зарплатой",
+    shortLabel: "Желаемая зарплата",
+    unit: "percent",
+    description: "Доля резюме с указанной желаемой зарплатой, включая скрытые резюме в знаменателе",
   },
   remoteShare: {
     key: "remoteShare",

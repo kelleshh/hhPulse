@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "hhPulse browser companion",
+  "version": "0.1.0",
+  "description": "Runs sequential market count searches in your signed-in Chrome profile.",
+  "permissions": ["tabs", "scripting"],
+  "host_permissions": ["https://hh.ru/*", "http://localhost/*", "http://127.0.0.1/*"],
+  "action": {"default_title": "Open hhPulse collector"},
+  "background": {"service_worker": "background.js"}
+}

@@ -14,16 +14,17 @@ from hhpulse.application.scheduler import DailyCrawlScheduler
 from hhpulse.application.use_cases.execution import ExecuteDailyCrawl
 from hhpulse.config import Settings
 from hhpulse.domain.value_objects import RetryPolicy
+from hhpulse.infrastructure.browser.bridge import BrowserBridge
+from hhpulse.infrastructure.browser.source import BrowserMarketSourceFactory
 from hhpulse.infrastructure.clock import SystemClock
 from hhpulse.infrastructure.hh.catalog import HhProfessionalRoleCatalog
-from hhpulse.infrastructure.hh.factory import HhMarketSourceFactory
 from hhpulse.infrastructure.persistence.analytics import SqliteAnalyticsReadRepository
 from hhpulse.infrastructure.persistence.database import SqliteDatabase
 from hhpulse.infrastructure.persistence.repositories import (
     SqliteAnalysisJobRepository,
     SqliteCrawlExecutionRepository,
 )
-from hhpulse.infrastructure.runtime import AsyncioSleeper, FileHtmlQuarantine
+from hhpulse.infrastructure.runtime import AsyncioSleeper, FilePayloadQuarantine
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,6 +36,7 @@ class Container:
     scheduler: DailyCrawlScheduler | None = None
     analytics: AnalyticsReadRepository | None = None
     role_catalog: ProfessionalRoleCatalog | None = None
+    browser_bridge: BrowserBridge | None = None
 
 
 async def build_container(settings: Settings | None = None) -> Container:
@@ -46,7 +48,7 @@ async def build_container(settings: Settings | None = None) -> Container:
     jobs = SqliteAnalysisJobRepository(database)
     executions = SqliteCrawlExecutionRepository(database)
     analytics = SqliteAnalyticsReadRepository(database)
-    quarantine = FileHtmlQuarantine(
+    quarantine = FilePayloadQuarantine(
         resolved.quarantine_dir,
         retention=timedelta(hours=resolved.quarantine_retention_hours),
     )
@@ -54,9 +56,15 @@ async def build_container(settings: Settings | None = None) -> Container:
         initial_delay_seconds=resolved.retry_initial_seconds,
         max_delay_seconds=resolved.retry_max_seconds,
     )
+    browser_bridge = BrowserBridge()
+    catalog = HhProfessionalRoleCatalog(
+        access_token=resolved.hh_access_token,
+        user_agent=resolved.hh_user_agent,
+        timeout_seconds=resolved.source_timeout_seconds,
+    )
     executor = ExecuteDailyCrawl(
         executions,
-        HhMarketSourceFactory(timeout_seconds=resolved.source_timeout_seconds),
+        BrowserMarketSourceFactory(browser_bridge, catalog),
         quarantine,
         clock,
         sleeper,
@@ -78,7 +86,6 @@ async def build_container(settings: Settings | None = None) -> Container:
         executions=executions,
         scheduler=scheduler,
         analytics=analytics,
-        role_catalog=HhProfessionalRoleCatalog(
-            timeout_seconds=resolved.source_timeout_seconds,
-        ),
+        role_catalog=catalog,
+        browser_bridge=browser_bridge,
     )
